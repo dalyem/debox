@@ -224,7 +224,12 @@ export default function PlayPage() {
             <Leaderboard players={priv.table} youId={String(me.playerId)} animate />
           </div>
         ) : (
-          <PhaseCardsController view={priv} onMove={onMove} submitting={submitting} />
+          <PhaseCardsController
+            view={priv}
+            onMove={onMove}
+            submitting={submitting}
+            storageKey={`debox.hand.${roomCode}`}
+          />
         )
       ) : null}
 

@@ -1,0 +1,169 @@
+"use client";
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { motion, type PanInfo } from "framer-motion";
+import type { Card } from "@/lib/cards";
+import { PlayingCard, type PlayingCardProps } from "./PlayingCard";
+
+/**
+ * A tiny, touch-first drag-and-drop layer built on framer-motion (no extra
+ * deps). Cards are free-dragged; on release we hit-test the point with
+ * `elementsFromPoint` (skipping the dragged card itself) and dispatch to the
+ * nearest registered drop zone — or, if released over another hand card,
+ * reorder. One gesture covers both: drag a card up onto a pile/meld/slot to
+ * play it, or sideways within the hand to rearrange it.
+ */
+
+type DropHandler = (card: Card) => void;
+interface Zone {
+  accepts: (card: Card) => boolean;
+  onDrop: DropHandler;
+}
+
+interface DnDApi {
+  registerZone: (id: string, zone: Zone) => void;
+  unregisterZone: (id: string) => void;
+  drop: (card: Card, x: number, y: number) => boolean;
+  dragging: Card | null;
+  setDragging: (card: Card | null) => void;
+}
+
+const Ctx = createContext<DnDApi | null>(null);
+
+function useDnd(): DnDApi {
+  const c = useContext(Ctx);
+  if (!c) throw new Error("DragDropProvider missing");
+  return c;
+}
+
+export function DragDropProvider({
+  children,
+  onReorder,
+}: {
+  children: ReactNode;
+  onReorder?: (cardId: string, overCardId: string) => void;
+}) {
+  const zones = useRef(new Map<string, Zone>());
+  const reorderRef = useRef(onReorder);
+  reorderRef.current = onReorder;
+  const [dragging, setDragging] = useState<Card | null>(null);
+
+  const registerZone = useCallback((id: string, zone: Zone) => {
+    zones.current.set(id, zone);
+  }, []);
+  const unregisterZone = useCallback((id: string) => {
+    zones.current.delete(id);
+  }, []);
+
+  const drop = useCallback((card: Card, x: number, y: number) => {
+    const els = document.elementsFromPoint(x, y) as HTMLElement[];
+    for (const el of els) {
+      const zid = el.dataset?.dropzone;
+      if (zid) {
+        const z = zones.current.get(zid);
+        if (z && z.accepts(card)) {
+          z.onDrop(card);
+          return true;
+        }
+      }
+      const hid = el.dataset?.handcard;
+      if (hid && hid !== card.id) {
+        reorderRef.current?.(card.id, hid);
+        return true;
+      }
+    }
+    return false;
+  }, []);
+
+  return (
+    <Ctx.Provider
+      value={{ registerZone, unregisterZone, drop, dragging, setDragging }}
+    >
+      {children}
+    </Ctx.Provider>
+  );
+}
+
+/**
+ * Register a drop target. Spread `dropProps` onto the element; `active` is true
+ * while a compatible card is being dragged (for highlight).
+ */
+export function useDropZone(
+  accepts: (card: Card) => boolean,
+  onDrop: DropHandler,
+) {
+  const id = useId();
+  const { registerZone, unregisterZone, dragging } = useDnd();
+  const handlers = useRef({ accepts, onDrop });
+  handlers.current = { accepts, onDrop };
+
+  useEffect(() => {
+    registerZone(id, {
+      accepts: (c) => handlers.current.accepts(c),
+      onDrop: (c) => handlers.current.onDrop(c),
+    });
+    return () => unregisterZone(id);
+  }, [id, registerZone, unregisterZone]);
+
+  return {
+    dropProps: { "data-dropzone": id } as const,
+    active: !!dragging && accepts(dragging),
+  };
+}
+
+function clientPoint(e: MouseEvent | TouchEvent | PointerEvent) {
+  if ("changedTouches" in e && e.changedTouches.length > 0) {
+    return { x: e.changedTouches[0]!.clientX, y: e.changedTouches[0]!.clientY };
+  }
+  const m = e as MouseEvent;
+  return { x: m.clientX, y: m.clientY };
+}
+
+/** A hand card that can be dragged onto a drop zone (or sideways to reorder). */
+export function DragCard({
+  card,
+  draggable = true,
+  ...cardProps
+}: {
+  card: Card;
+  draggable?: boolean;
+} & Omit<PlayingCardProps, "card" | "onClick">) {
+  const { drop, setDragging } = useDnd();
+
+  if (!draggable) {
+    return (
+      <div data-handcard={card.id}>
+        <PlayingCard card={card} {...cardProps} />
+      </div>
+    );
+  }
+
+  return (
+    <motion.div
+      data-handcard={card.id}
+      drag
+      dragSnapToOrigin
+      dragMomentum={false}
+      onDragStart={() => setDragging(card)}
+      onDragEnd={(e, _info: PanInfo) => {
+        setDragging(null);
+        const p = clientPoint(e as PointerEvent);
+        drop(card, p.x, p.y);
+      }}
+      whileDrag={{ scale: 1.15, zIndex: 100 }}
+      className="relative touch-none"
+      style={{ cursor: "grab" }}
+    >
+      <PlayingCard card={card} {...cardProps} />
+    </motion.div>
+  );
+}
