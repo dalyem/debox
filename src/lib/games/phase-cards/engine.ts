@@ -19,7 +19,8 @@ import {
   topOf,
   recycleDiscard,
 } from "../../cards/deck";
-import { canHit, handPenalty, sortHand } from "../../cards/validate";
+import { handPenalty, sortHand } from "../../cards/validate";
+import { applyHitToGroup, buildLaidGroup, canHitLaidGroup } from "./melds";
 import type {
   GameEngine,
   GameEventOut,
@@ -310,12 +311,9 @@ function applyLayDown(
 
   const usedIds = new Set(groupIds.flat());
   const newHand = p.hand.filter((c) => !usedIds.has(c.id));
-  const laidGroups: LaidGroup[] = phase.requirements.map((req, i) => ({
-    type: req.type,
-    count: groups[i]!.length,
-    label: req.label,
-    cards: groups[i]!,
-  }));
+  const laidGroups: LaidGroup[] = phase.requirements.map((req, i) =>
+    buildLaidGroup(req.type, req.label, groups[i]!),
+  );
 
   const players = {
     ...state.players,
@@ -352,11 +350,7 @@ function applyHit(
   const group = target.laidGroups[groupIndex];
   if (!group) throw new Error(`No group ${groupIndex} for ${targetPlayerId}`);
 
-  const newGroup: LaidGroup = {
-    ...group,
-    cards: [...group.cards, card],
-    count: group.cards.length + 1,
-  };
+  const newGroup = applyHitToGroup(group, card);
   players[targetPlayerId] = {
     ...target,
     laidGroups: target.laidGroups.map((g, i) => (i === groupIndex ? newGroup : g)),
@@ -517,7 +511,7 @@ function validate(
       if (!target) return { ok: false, reason: "Unknown target player" };
       const group = target.laidGroups[move.groupIndex];
       if (!group) return { ok: false, reason: "That meld doesn't exist" };
-      const res = canHit(group.type, group.cards, card);
+      const res = canHitLaidGroup(group, card);
       if (!res.ok) return { ok: false, reason: res.reason };
       return { ok: true };
     }

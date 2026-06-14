@@ -4,18 +4,19 @@ import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Hand as HandIcon, Layers, Plus, Trash2 } from "lucide-react";
 import { type Card, isFreeze } from "@/lib/cards";
-import { canHit } from "@/lib/cards/validate";
+import { canHitLaidGroup } from "@/lib/games/phase-cards/melds";
 import type { PhaseDefinition } from "@/lib/games/phase-cards/phases";
 import type {
   PhaseCardsMove,
   PrivateGameView,
 } from "@/lib/games/phase-cards/types";
 import { PlayingCard } from "./PlayingCard";
-import { Hand } from "./Hand";
+import { FannedHand } from "./FannedHand";
 import { MeldRow } from "./MeldRow";
 import { ObjectiveStrip } from "./ObjectiveStrip";
 import { LayDownBuilder } from "./LayDownBuilder";
 import { MobileTable } from "./MobileTable";
+import { Leaderboard } from "./Leaderboard";
 import { Avatar } from "@/components/platform/Avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -39,7 +40,7 @@ export function PhaseCardsController({
 }) {
   const you = view.you;
   const [mode, setMode] = useState<"play" | "laydown">("play");
-  const [tab, setTab] = useState<"play" | "table">("play");
+  const [tab, setTab] = useState<"play" | "scores">("play");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hitOpen, setHitOpen] = useState(false);
   const [freezeOpen, setFreezeOpen] = useState(false);
@@ -61,7 +62,7 @@ export function PhaseCardsController({
     const opts: HitOption[] = [];
     for (const p of view.table) {
       p.laidGroups.forEach((g, gi) => {
-        if (canHit(g.type, g.cards, selectedCard).ok) {
+        if (canHitLaidGroup(g, selectedCard).ok) {
           opts.push({
             targetPlayerId: p.playerId,
             targetName: p.displayName,
@@ -119,11 +120,12 @@ export function PhaseCardsController({
   }
 
   /* ---- PLAY MODE ---- */
+  const canSelect = view.isYourTurn && view.hasDrawn;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Hand / Table tabs — the Table is the same public view a TV would show */}
+      {/* Play / Scores tabs */}
       <div className="flex gap-1 px-3 pt-3">
-        {(["play", "table"] as const).map((t) => (
+        {(["play", "scores"] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -133,112 +135,116 @@ export function PhaseCardsController({
               tab === t ? "bg-white/15 text-cream" : "text-haze hover:bg-white/5",
             )}
           >
-            {t === "play" ? "Your hand" : "Table"}
+            {t === "play" ? "Play" : "Scores"}
           </button>
         ))}
       </div>
 
-      {tab === "table" ? (
-        <div className="flex-1 overflow-y-auto">
-          <MobileTable
-            table={view.table}
-            discardTop={view.discardTop}
-            drawCount={view.drawCount}
-            currentPlayerId={view.currentPlayerId}
-            round={view.round}
-            youId={you.playerId}
-          />
+      {tab === "scores" ? (
+        <div className="flex-1 overflow-y-auto p-3">
+          <Leaderboard players={view.table} youId={you.playerId} />
         </div>
       ) : (
         <>
-      {/* Objective */}
-      <div className="px-3 pt-3">
-        <div className="surface flex flex-col gap-2 p-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-[0.65rem] uppercase tracking-[0.25em] text-haze">
-                {you.finishedLadder ? "Status" : `Your Phase ${you.phaseIndex}`}
+          {/* Table + your objective (scrolls); hand + dock stay pinned below */}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="px-3 pt-3">
+              <div className="surface flex flex-col gap-2 p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[0.65rem] uppercase tracking-[0.25em] text-haze">
+                      {you.finishedLadder ? "Status" : `Your Phase ${you.phaseIndex}`}
+                    </div>
+                    <div className="font-display text-lg font-bold">
+                      {you.phaseName}
+                    </div>
+                  </div>
+                  {you.completedPhase ? (
+                    <span className="chip border-lime/40 bg-lime/15 text-lime">
+                      Laid down ✓
+                    </span>
+                  ) : null}
+                </div>
+                {!you.completedPhase ? (
+                  <ObjectiveStrip requirements={you.requirements} size="sm" />
+                ) : you.laidGroups.length > 0 ? (
+                  <div className="flex flex-wrap gap-3">
+                    {you.laidGroups.map((g, i) => (
+                      <MeldRow key={i} group={g} size="xs" />
+                    ))}
+                  </div>
+                ) : null}
               </div>
-              <div className="font-display text-lg font-bold">{you.phaseName}</div>
             </div>
-            {you.completedPhase ? (
-              <span className="chip border-lime/40 bg-lime/15 text-lime">Laid down ✓</span>
+
+            <MobileTable
+              table={view.table}
+              discardTop={view.discardTop}
+              drawCount={view.drawCount}
+              currentPlayerId={view.currentPlayerId}
+              round={view.round}
+              youId={you.playerId}
+            />
+          </div>
+
+          {/* Fanned, reorderable hand */}
+          <FannedHand
+            cards={you.hand}
+            selectedId={selectedId}
+            onTap={
+              canSelect
+                ? (id) => setSelectedId((cur) => (cur === id ? null : id))
+                : undefined
+            }
+            disabled={!canSelect}
+            size="lg"
+          />
+
+          {/* Action dock */}
+          <div className="border-t border-white/10 bg-ink-2/90 px-3 py-3 backdrop-blur">
+            {!view.isYourTurn ? (
+              <WaitingDock view={view} />
+            ) : !view.hasDrawn ? (
+              <DrawDock view={view} onMove={move} disabled={submitting} />
             ) : (
-              <span className="chip text-haze">{you.score} pts</span>
+              <div className="flex flex-col gap-2">
+                <p className="text-center text-xs text-haze">
+                  {selectedCard
+                    ? "Discard to end your turn, or add to a meld."
+                    : "Drag to reorder · tap a card to discard or meld."}
+                </p>
+                <div className="flex gap-2">
+                  {view.actions.canLayDown ? (
+                    <Button
+                      variant="secondary"
+                      className="flex-1"
+                      onClick={() => setMode("laydown")}
+                    >
+                      <Layers className="size-4" /> Build phase
+                    </Button>
+                  ) : null}
+                  {view.actions.canHit ? (
+                    <Button
+                      variant="secondary"
+                      className="flex-1"
+                      disabled={hitOptions.length === 0}
+                      onClick={() => setHitOpen(true)}
+                    >
+                      <Plus className="size-4" /> Add to meld
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant="primary"
+                    className="flex-1"
+                    disabled={!selectedCard || submitting}
+                    onClick={onDiscard}
+                  >
+                    <Trash2 className="size-4" /> Discard
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
-          {!you.completedPhase ? (
-            <ObjectiveStrip requirements={you.requirements} size="sm" />
-          ) : you.laidGroups.length > 0 ? (
-            <div className="flex flex-wrap gap-3">
-              {you.laidGroups.map((g, i) => (
-                <MeldRow key={i} group={g} size="xs" />
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Hand */}
-      <div className="flex-1 overflow-y-auto px-3 py-4">
-        <Hand
-          cards={you.hand}
-          selectedIds={selectedId ? new Set([selectedId]) : undefined}
-          onTap={
-            view.isYourTurn && view.hasDrawn
-              ? (id) => setSelectedId((cur) => (cur === id ? null : id))
-              : undefined
-          }
-          disabled={!view.isYourTurn || !view.hasDrawn}
-          size="md"
-        />
-      </div>
-
-      {/* Action dock */}
-      <div className="sticky bottom-0 z-10 border-t border-white/10 bg-ink-2/90 px-3 py-3 backdrop-blur">
-        {!view.isYourTurn ? (
-          <WaitingDock view={view} />
-        ) : !view.hasDrawn ? (
-          <DrawDock view={view} onMove={move} disabled={submitting} />
-        ) : (
-          <div className="flex flex-col gap-2">
-            <p className="text-center text-xs text-haze">
-              {selectedCard
-                ? `Selected ${selectedCard.kind === "number" ? `${selectedCard.value}` : selectedCard.kind}`
-                : "Tap a card, then discard to end your turn."}
-            </p>
-            <div className="flex gap-2">
-              {view.actions.canLayDown ? (
-                <Button
-                  variant="secondary"
-                  className="flex-1"
-                  onClick={() => setMode("laydown")}
-                >
-                  <Layers className="size-4" /> Build phase
-                </Button>
-              ) : null}
-              {view.actions.canHit ? (
-                <Button
-                  variant="secondary"
-                  className="flex-1"
-                  disabled={hitOptions.length === 0}
-                  onClick={() => setHitOpen(true)}
-                >
-                  <Plus className="size-4" /> Add to meld
-                </Button>
-              ) : null}
-              <Button
-                variant="primary"
-                className="flex-1"
-                disabled={!selectedCard || submitting}
-                onClick={onDiscard}
-              >
-                <Trash2 className="size-4" /> Discard
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
         </>
       )}
 

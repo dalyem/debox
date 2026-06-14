@@ -4,7 +4,6 @@ import type { Card } from "@/lib/cards";
 import type { PublicPlayerView } from "@/lib/games/phase-cards/types";
 import { Avatar } from "@/components/platform/Avatar";
 import { PlayingCard } from "./PlayingCard";
-import { PhaseLadder } from "./PhaseLadder";
 import { MeldRow } from "./MeldRow";
 import { DrawPileStack } from "./Piles";
 import { cn } from "@/lib/utils";
@@ -93,11 +92,8 @@ export function MobileTable({
                     {p.finishedLadder ? "Champion" : `Phase ${p.phaseIndex}`}
                   </span>
                   <span>·</span>
-                  <span>{p.handCount} cards</span>
-                  <span>·</span>
-                  <span>{p.score} pts</span>
+                  <span>{p.handCount} in hand</span>
                 </div>
-                <PhaseLadder phaseIndex={p.phaseIndex} className="mt-1" />
                 {p.laidGroups.length > 0 ? (
                   <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1.5">
                     {p.laidGroups.map((g, i) => (

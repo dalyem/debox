@@ -7,24 +7,30 @@ import { faceOf } from "@/lib/design/cards";
 import { cn } from "@/lib/utils";
 
 const HEIGHTS: Record<string, string> = {
-  xs: "h-12",
+  xs: "h-14",
   sm: "h-16",
   md: "h-24",
   lg: "h-32",
   xl: "h-44",
 };
 
-const VALUE_SIZE: Record<string, string> = {
+// The corner identifier (value + suit) is the primary readout — it's the part
+// that stays visible when cards overlap in a meld/fan.
+const CORNER_VALUE: Record<string, string> = {
+  xs: "text-sm",
+  sm: "text-base",
+  md: "text-lg",
+  lg: "text-2xl",
+  xl: "text-3xl",
+};
+const CORNER_GLYPH: Record<string, string> = {
   xs: "text-[0.6rem]",
   sm: "text-xs",
-  md: "text-base",
-  lg: "text-xl",
-  xl: "text-2xl",
+  md: "text-sm",
+  lg: "text-lg",
+  xl: "text-xl",
 };
-
-const GLYPH_SIZE: Record<string, string> = {
-  xs: "text-lg",
-  sm: "text-2xl",
+const CENTER_SIZE: Record<string, string> = {
   md: "text-4xl",
   lg: "text-5xl",
   xl: "text-7xl",
@@ -57,6 +63,7 @@ export function PlayingCard({
   const interactive = !!onClick && !disabled;
   const isNumber = card.kind === "number";
   const corner = isNumber ? String(card.value) : face.glyph;
+  const showCenter = size === "md" || size === "lg" || size === "xl";
 
   if (faceDown) {
     return (
@@ -75,7 +82,7 @@ export function PlayingCard({
               "repeating-linear-gradient(135deg,#3b2a72 0 10px,#241a4d 10px 20px)",
           }}
         />
-        <div className="absolute inset-0 flex items-center justify-center text-2xl opacity-70">
+        <div className="absolute inset-0 flex items-center justify-center text-xl opacity-70">
           🎴
         </div>
       </div>
@@ -90,50 +97,54 @@ export function PlayingCard({
       onClick={interactive ? onClick : undefined}
       disabled={interactive ? disabled : undefined}
       aria-pressed={interactive ? selected : undefined}
+      aria-label={
+        isNumber ? `${face.label} ${card.value}` : face.label
+      }
       whileTap={interactive ? { scale: 0.94 } : undefined}
       animate={{ y: selected ? -14 : 0 }}
       transition={{ type: "spring", stiffness: 500, damping: 30 }}
       className={cn(
-        "relative flex shrink-0 select-none flex-col justify-between overflow-hidden rounded-xl border-2 p-1.5 font-bold leading-none shadow-[0_8px_18px_-8px_rgba(0,0,0,0.6)]",
+        "relative shrink-0 select-none overflow-hidden rounded-xl border-2 shadow-[0_6px_14px_-6px_rgba(0,0,0,0.6)]",
         interactive && "cursor-pointer",
         selected ? "border-white ring-2 ring-white/80" : "border-white/70",
         dimmed && "opacity-40 saturate-50",
-        VALUE_SIZE[size],
         HEIGHTS[size],
         className,
       )}
       style={{
         aspectRatio: "5 / 7",
-        background: `linear-gradient(155deg, ${face.from}, ${face.to})`,
+        background: `linear-gradient(160deg, ${face.from}, ${face.to})`,
         color: face.text,
         ...style,
       }}
     >
-      <span className="flex flex-col items-center self-start leading-none">
-        <span>{corner}</span>
-        {isNumber ? <span className="opacity-90">{face.glyph}</span> : null}
+      {/* Corner identifier (top-left) */}
+      <span className="absolute left-1 top-0.5 flex flex-col items-center font-bold leading-none">
+        <span className={CORNER_VALUE[size]}>{corner}</span>
+        <span className={cn("opacity-90 leading-none", CORNER_GLYPH[size])}>
+          {face.glyph}
+        </span>
       </span>
 
-      <span
-        className={cn(
-          "absolute inset-0 flex items-center justify-center",
-          GLYPH_SIZE[size],
-        )}
-        style={{ textShadow: "0 2px 6px rgba(0,0,0,0.25)" }}
-      >
-        {isNumber ? card.value : face.glyph}
-      </span>
+      {/* Center accent (larger cards only) */}
+      {showCenter ? (
+        <span
+          className={cn(
+            "absolute inset-0 flex items-center justify-center font-bold opacity-90",
+            CENTER_SIZE[size],
+          )}
+          style={{ textShadow: "0 2px 6px rgba(0,0,0,0.25)" }}
+        >
+          {isNumber ? card.value : face.glyph}
+        </span>
+      ) : null}
 
-      {!isNumber ? (
-        <span className="absolute inset-x-0 bottom-1 text-center text-[0.55em] font-extrabold uppercase tracking-widest opacity-90">
+      {/* Label for wild/freeze (larger cards only) */}
+      {!isNumber && showCenter ? (
+        <span className="absolute inset-x-0 bottom-1 text-center text-[0.6rem] font-extrabold uppercase tracking-widest opacity-90">
           {face.label}
         </span>
-      ) : (
-        <span className="flex rotate-180 flex-col items-center self-start leading-none">
-          <span>{corner}</span>
-          <span className="opacity-90">{face.glyph}</span>
-        </span>
-      )}
+      ) : null}
     </Comp>
   );
 }

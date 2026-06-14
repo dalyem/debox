@@ -21,6 +21,8 @@ import { ControllerShell } from "@/components/controller/ControllerShell";
 import { ControllerLobby } from "@/components/controller/ControllerLobby";
 import { ControllerResults } from "@/components/controller/ControllerResults";
 import { PhaseCardsController } from "@/components/games/phase-cards/PhaseCardsController";
+import { Leaderboard } from "@/components/games/phase-cards/Leaderboard";
+import { FreezeFlash } from "@/components/games/phase-cards/FreezeFlash";
 import { ROOM_STATUS_LABELS, type RoomStatus } from "@/lib/platform/types";
 
 function FullScreenSpinner({ label }: { label: string }) {
@@ -211,15 +213,23 @@ export default function PlayPage() {
             Waiting for the game to start…
           </div>
         ) : priv.status === "round_over" || priv.status === "game_over" ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center px-6">
-            <div className="text-4xl">🧮</div>
-            <div className="font-display text-2xl font-bold">Round complete!</div>
-            <p className="text-haze">Scores are on the big screen. Next round dealing…</p>
-            <Spinner />
+          <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
+            <div className="text-center">
+              <div className="text-3xl">🧮</div>
+              <div className="font-display text-2xl font-bold">Round complete!</div>
+              <p className="text-sm text-haze">
+                Where everyone stands — next round dealing…
+              </p>
+            </div>
+            <Leaderboard players={priv.table} youId={String(me.playerId)} animate />
           </div>
         ) : (
           <PhaseCardsController view={priv} onMove={onMove} submitting={submitting} />
         )
+      ) : null}
+
+      {status === "active" && priv && priv.status === "in_progress" ? (
+        <FreezeFlash roomId={String(rid)} playerId={String(me.playerId)} />
       ) : null}
 
       {status === "ended" ? (

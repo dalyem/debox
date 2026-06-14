@@ -8,6 +8,9 @@ export interface LaidGroup {
   count: number;
   label: string;
   cards: Card[];
+  /** For runs: the locked consecutive value window the run occupies. */
+  lo?: number;
+  hi?: number;
 }
 
 export interface PhaseCardsPlayer {
