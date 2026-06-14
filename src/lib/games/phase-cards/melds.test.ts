@@ -76,6 +76,24 @@ describe("run melds", () => {
     expect(canHitLaidGroup(g, num("red", 3)).ok).toBe(true); // low end only
   });
 
+  it("locks a wild ADDED VIA A HIT, not just one laid at the start", () => {
+    let g = buildLaidGroup("run", "Run of 4", [
+      num("red", 5),
+      num("blue", 6),
+      num("green", 7),
+      num("yellow", 8),
+    ]);
+    // hit a wild → it extends the high end and is locked as 9
+    g = applyHitToGroup(g, wild());
+    expect(g.hi).toBe(9);
+    expect(g.cards).toHaveLength(5);
+    // nobody can drop a natural 9 — the wild already holds that value
+    expect(canHitLaidGroup(g, num("red", 9)).ok).toBe(false);
+    // but the run can still grow past the wild (10) or at the bottom (4)
+    expect(canHitLaidGroup(g, num("red", 10)).ok).toBe(true);
+    expect(canHitLaidGroup(g, num("red", 4)).ok).toBe(true);
+  });
+
   it("sets still accept matching values or wilds (no ordering)", () => {
     const g = buildLaidGroup("set", "Set of 3", [
       num("red", 10),
