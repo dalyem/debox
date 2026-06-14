@@ -313,6 +313,53 @@ export const end = mutation({
   },
 });
 
+/**
+ * Replay with the SAME players — deal a brand-new game (ended → active).
+ * Everyone stays seated; scores, phases and the deck all reset.
+ */
+export const playAgain = mutation({
+  args: { roomId: v.id("rooms") },
+  handler: async (ctx, { roomId }) => {
+    const room = await requireHostRoom(ctx, roomId);
+    if (room.status !== "ended") {
+      throw new Error("You can only replay a finished game");
+    }
+    await launchGame(ctx, room); // re-seeds + re-deals, sets status → active
+    await ctx.db.patch(roomId, { result: undefined, endedAt: undefined });
+    await emit(ctx, roomId, "game_replay", {}, "all");
+    return { ok: true };
+  },
+});
+
+/**
+ * Reopen the lobby for a NEW group (ended → lobby) — keeps the room and its
+ * code so people can join or leave, then the host starts again. The finished
+ * game's state and standings are cleared.
+ */
+export const reopenLobby = mutation({
+  args: { roomId: v.id("rooms") },
+  handler: async (ctx, { roomId }) => {
+    const room = await requireHostRoom(ctx, roomId);
+    if (room.status !== "ended") {
+      throw new Error("You can only do this after a game ends");
+    }
+    const row = await getGameRow(ctx, roomId);
+    if (row) await ctx.db.delete(row._id);
+    const now = Date.now();
+    await ctx.db.patch(roomId, {
+      status: "lobby",
+      result: undefined,
+      round: undefined,
+      startedAt: undefined,
+      endedAt: undefined,
+      lastActivityAt: now,
+      expiresAt: now + ROOM_IDLE_EXPIRY_MS,
+    });
+    await emit(ctx, roomId, "lobby_reopen", {}, "all");
+    return { ok: true };
+  },
+});
+
 /** Close the room (terminal — cannot be reopened). */
 export const close = mutation({
   args: { roomId: v.id("rooms") },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
 import { Crown } from "lucide-react";
@@ -35,9 +35,11 @@ function fireConfetti() {
 export function Victory({
   result,
   players,
+  actions,
 }: {
   result: GameResult;
   players: PublicPlayerView[];
+  actions?: ReactNode;
 }) {
   const byId = new Map(players.map((p) => [p.playerId, p]));
 
@@ -51,7 +53,7 @@ export function Victory({
   const winnerSwatch = paletteOf(winner?.avatar.color ?? "gold");
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-10">
+    <div className="flex flex-1 flex-col items-center justify-center gap-8 overflow-y-auto px-6 py-10">
       <motion.div
         initial={{ scale: 0.3, opacity: 0, rotate: -12 }}
         animate={{ scale: 1, opacity: 1, rotate: 0 }}
@@ -133,6 +135,8 @@ export function Victory({
           })}
         </div>
       </motion.div>
+
+      {actions}
     </div>
   );
 }

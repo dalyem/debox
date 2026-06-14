@@ -39,6 +39,10 @@ import { AnchorProvider } from "@/components/games/phase-cards/anchors";
 import { CardFlights } from "@/components/games/phase-cards/CardFlights";
 import { RoundSummary } from "@/components/games/phase-cards/RoundSummary";
 import { Victory } from "@/components/games/phase-cards/Victory";
+import {
+  PostGameActions,
+  type PostGameAction,
+} from "@/components/platform/PostGameActions";
 import { ROOM_STATUS_LABELS, type RoomStatus } from "@/lib/platform/types";
 
 export default function HostRoomPage() {
@@ -58,8 +62,43 @@ export default function HostRoomPage() {
   const end = useMutation(api.rooms.end);
   const close = useMutation(api.rooms.close);
   const nextRound = useMutation(api.rooms.nextRound);
+  const playAgain = useMutation(api.rooms.playAgain);
+  const reopenLobby = useMutation(api.rooms.reopenLobby);
 
   const [starting, setStarting] = useState(false);
+  const [postGameBusy, setPostGameBusy] = useState<PostGameAction>(null);
+
+  const postGameActions = (
+    <PostGameActions
+      busy={postGameBusy}
+      onPlayAgain={async () => {
+        setPostGameBusy("again");
+        try {
+          await playAgain({ roomId });
+        } catch {
+          // e.g. players left and we're now below the minimum — the host can
+          // fall back to "new players" to reopen the lobby instead.
+        } finally {
+          setPostGameBusy(null);
+        }
+      }}
+      onNewPlayers={async () => {
+        setPostGameBusy("new");
+        try {
+          await reopenLobby({ roomId });
+        } catch {
+          // no-op; reopening the lobby has no precondition to fail on
+        } finally {
+          setPostGameBusy(null);
+        }
+      }}
+      onEnd={async () => {
+        setPostGameBusy("end");
+        await close({ roomId });
+        router.push("/dashboard/new");
+      }}
+    />
+  );
 
   const nameOf = useMemo(() => {
     const map = new Map((data?.players ?? []).map((p) => [String(p.playerId), p.displayName]));
@@ -137,19 +176,14 @@ export default function HostRoomPage() {
             </>
           )}
 
-          {isTerminal ? (
-            <>
-              {status === "ended" ? (
-                <Button size="sm" variant="secondary" onClick={() => close({ roomId })}>
-                  Close room
-                </Button>
-              ) : null}
-              <Button size="sm" variant="primary" asChild>
-                <Link href="/dashboard">
-                  <LayoutDashboard className="size-4" /> Dashboard
-                </Link>
-              </Button>
-            </>
+          {/* When a game is over the choices live in the on-screen action bar
+              (play again / new players / end). Once truly closed, just exit. */}
+          {status === "closed" || status === "expired" ? (
+            <Button size="sm" variant="primary" asChild>
+              <Link href="/dashboard">
+                <LayoutDashboard className="size-4" /> Dashboard
+              </Link>
+            </Button>
           ) : null}
         </div>
       </header>
@@ -211,7 +245,11 @@ export default function HostRoomPage() {
       ) : null}
 
       {showResults && result ? (
-        <Victory result={result} players={view?.players ?? []} />
+        <Victory
+          result={result}
+          players={view?.players ?? []}
+          actions={status === "ended" ? postGameActions : undefined}
+        />
       ) : null}
 
       {(status === "closed" || status === "expired") && !result ? (

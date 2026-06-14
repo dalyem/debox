@@ -27,6 +27,10 @@ import { TurnTimer } from "@/components/games/phase-cards/TurnTimer";
 import { YourTurnToast } from "@/components/games/phase-cards/YourTurnToast";
 import { AnchorProvider } from "@/components/games/phase-cards/anchors";
 import { CardFlights } from "@/components/games/phase-cards/CardFlights";
+import {
+  PostGameActions,
+  type PostGameAction,
+} from "@/components/platform/PostGameActions";
 import { ROOM_STATUS_LABELS, type RoomStatus } from "@/lib/platform/types";
 
 function FullScreenSpinner({ label }: { label: string }) {
@@ -72,10 +76,13 @@ export default function PlayPage() {
   const endGame = useMutation(api.rooms.end);
   const closeRoom = useMutation(api.rooms.close);
   const nextRound = useMutation(api.rooms.nextRound);
+  const playAgainMut = useMutation(api.rooms.playAgain);
+  const reopenLobbyMut = useMutation(api.rooms.reopenLobby);
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [postGameBusy, setPostGameBusy] = useState<PostGameAction>(null);
 
   // No session for this code → go register a display name.
   useEffect(() => {
@@ -168,6 +175,25 @@ export default function PlayPage() {
       </>
     ) : null;
 
+  // The host (playing on their phone) gets the Jackbox-style end choices.
+  const postGameActions =
+    amIHost && status === "ended" ? (
+      <PostGameActions
+        busy={postGameBusy}
+        onPlayAgain={async () => {
+          setPostGameBusy("again");
+          await hostAct(() => playAgainMut({ roomId: rid }));
+          setPostGameBusy(null);
+        }}
+        onNewPlayers={async () => {
+          setPostGameBusy("new");
+          await hostAct(() => reopenLobbyMut({ roomId: rid }));
+          setPostGameBusy(null);
+        }}
+        onEnd={onExit}
+      />
+    ) : null;
+
   const gameLive = status === "active" && !!priv && priv.status === "in_progress";
 
   return (
@@ -253,7 +279,12 @@ export default function PlayPage() {
 
       {status === "ended" ? (
         result ? (
-          <ControllerResults result={result} players={roster} youId={String(me.playerId)} />
+          <ControllerResults
+            result={result}
+            players={roster}
+            youId={String(me.playerId)}
+            actions={postGameActions}
+          />
         ) : (
           <div className="flex flex-1 items-center justify-center text-haze">
             Wrapping up…

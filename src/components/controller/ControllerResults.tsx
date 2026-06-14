@@ -1,5 +1,6 @@
 "use client";
 
+import { type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Crown } from "lucide-react";
 import type { GameResult } from "@/lib/games/types";
@@ -16,10 +17,12 @@ export function ControllerResults({
   result,
   players,
   youId,
+  actions,
 }: {
   result: GameResult;
   players: RosterPlayer[];
   youId: string;
+  actions?: ReactNode;
 }) {
   const byId = new Map(players.map((p) => [p.playerId, p]));
   const mine = result.standings.find((s) => s.playerId === youId);
@@ -84,9 +87,12 @@ export function ControllerResults({
         </div>
       </div>
 
-      <p className="text-center text-sm text-haze">
-        Thanks for playing! Keep this screen open for a rematch.
-      </p>
+      {actions ?? (
+        <p className="text-center text-sm text-haze">
+          Thanks for playing! The host will pick what&apos;s next — keep this
+          screen open for a rematch.
+        </p>
+      )}
     </div>
   );
 }
