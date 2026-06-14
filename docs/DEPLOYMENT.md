@@ -10,8 +10,7 @@ production.
 - [3. Clerk](#3-clerk)
 - [4. Environment variables](#4-environment-variables)
 - [5. Run locally](#5-run-locally)
-- [6. Production](#6-production)
-- [7. CI/CD secrets](#7-cicd-secrets)
+- [6. Production deploys (Vercel owns it)](#6-production-deploys-vercel-owns-it)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -63,7 +62,7 @@ sign-in pages required. Only `/dashboard` and `/host/*` are protected
 
 Variables live in **three** places. `NEXT_PUBLIC_*` are read by the browser at
 build time **and** (because `convex/rooms.ts` builds the share URL server-side)
-some are also read inside Convex — note the duplication for `NEXT_PUBLIC_APP_URL`.
+`NEXT_PUBLIC_APP_URL` is read inside Convex.
 
 ### `.env.local` (Next.js — local dev)
 
@@ -100,70 +99,74 @@ npm run dev         # terminal 2 — web → http://localhost:3000
 Smoke test: sign in → **New game** → **Phase Cards** → open the join URL (or QR)
 in two other browser tabs/phones → enter names → **Start game**.
 
-## 6. Production
+## 6. Production deploys (Vercel owns it)
 
-Deploy the backend, then the frontend (the frontend depends on the backend's
-schema/API being live).
+Vercel deploys the frontend **and** the Convex backend on every production build,
+via the build command in [`vercel.json`](../vercel.json):
 
-### Convex (production)
-
-```bash
-npx convex deploy        # creates/updates your prod deployment
+```sh
+if [ "$VERCEL_ENV" = production ]; then npx convex deploy --cmd 'npm run build'; else npm run build; fi
 ```
 
-In the **Convex dashboard for the production deployment**, set the same backend
-variables from step 4 (`CLERK_JWT_ISSUER_DOMAIN`, `GUEST_TOKEN_SECRET`,
-`NEXT_PUBLIC_APP_URL` = your real domain). `npx convex deploy` prints the prod
-`NEXT_PUBLIC_CONVEX_URL` — you'll need it for Vercel.
+- **Production** builds run `npx convex deploy --cmd 'npm run build'`: this
+  deploys Convex to your **prod** deployment, then builds the site with the prod
+  `NEXT_PUBLIC_CONVEX_URL` injected automatically.
+- **Preview** builds run plain `next build`, so previews never deploy to prod.
 
-### Vercel (production)
+GitHub Actions (`.github/workflows/ci.yml`) is the **quality gate only** — lint ·
+typecheck · test · build on every PR and push. It does not deploy, so there's no
+double-deploy and no deploy secrets live in GitHub.
 
-Set these **Environment Variables** in the Vercel project:
+### One-time setup
 
-| Variable | Value |
-| --- | --- |
-| `NEXT_PUBLIC_CONVEX_URL` | prod Convex URL (from `convex deploy`) |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk publishable key |
-| `CLERK_SECRET_KEY` | Clerk secret key |
-| `NEXT_PUBLIC_APP_URL` | your production domain, e.g. `https://debox.app` |
+1. **Import the repo into Vercel** (New Project → pick this repo). Vercel
+   auto-detects Next.js and reads `vercel.json`.
 
-**Two ways to ship** — pick one:
+2. **Generate a Convex *production* deploy key.** Convex dashboard → your project
+   → flip the deployment selector to **Production** → **Settings → Deploy Keys** →
+   **Generate Production Deploy Key**. Copy the `prod:…` value.
 
-- **Option A — GitHub Actions (this repo's `.github/workflows/ci.yml`).**
-  On push to `main`: lint → typecheck → test → build → deploy Convex → deploy
-  Vercel. Add the secrets in [§7](#7-cicd-secrets). Turn **off** Vercel's own Git
-  auto-deploy so you don't double-deploy.
+3. **Set Vercel environment variables** (Project → Settings → Environment
+   Variables):
 
-- **Option B — Vercel builds everything.** Set the Vercel **Build Command** to:
-  ```
-  npx convex deploy --cmd 'npm run build'
-  ```
-  and add `CONVEX_DEPLOY_KEY` to Vercel's env. Vercel then deploys Convex and
-  builds the site on every push, and injects the right `NEXT_PUBLIC_CONVEX_URL`
-  automatically. (In this mode you can drop the `deploy` job from CI and keep
-  only `verify`.)
+   | Variable | Vercel scope | Value / source |
+   | --- | --- | --- |
+   | `CONVEX_DEPLOY_KEY` | **Production** | the `prod:…` key from step 2 |
+   | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Production (+ Preview) | Clerk publishable key |
+   | `CLERK_SECRET_KEY` | Production (+ Preview) | Clerk secret key |
+   | `NEXT_PUBLIC_CONVEX_URL` | **Preview** only | your *dev* Convex URL (prod is auto-injected by the build command, so leave it unset for Production) |
 
-## 7. CI/CD secrets
+4. **Set the Convex *production* backend variables** — dashboard (Production
+   deployment → Settings → Environment Variables) or CLI with `--prod`:
 
-For **Option A**, add these GitHub repository secrets (Settings → Secrets and
-variables → Actions):
+   ```bash
+   npx convex env set CLERK_JWT_ISSUER_DOMAIN "https://<app>.clerk.accounts.dev" --prod
+   npx convex env set GUEST_TOKEN_SECRET "$(openssl rand -base64 48)" --prod
+   npx convex env set NEXT_PUBLIC_APP_URL "https://<your-domain>" --prod
+   ```
 
-| Secret | Where to get it |
-| --- | --- |
-| `CONVEX_DEPLOY_KEY` | Convex dashboard → Settings → **Deploy keys** (production) |
-| `VERCEL_TOKEN` | Vercel → Account Settings → **Tokens** |
-| `VERCEL_ORG_ID` | `vercel link` then read `.vercel/project.json`, or project settings |
-| `VERCEL_PROJECT_ID` | same as above |
+5. **Kick off the first deploy.** Run `npx convex deploy` once locally so the prod
+   backend exists, then push to `main` (or click **Deploy** in Vercel). From now
+   on every production build deploys both tiers.
 
-The `verify` job needs no secrets — it builds with dummy, well-formed values.
+> **Dev vs prod are separate Convex deployments** with separate URLs and separate
+> env vars — set all three backend vars on the **Production** deployment, not just
+> dev.
+
+> **Clerk dev → production instance:** when you move Clerk to a production
+> instance (custom domain), recreate the `convex` JWT template there, then update
+> `CLERK_JWT_ISSUER_DOMAIN` (Convex prod) and the `pk_live_` / `sk_live_` keys
+> (Vercel).
 
 ## Troubleshooting
 
 | Symptom | Fix |
 | --- | --- |
 | `Missing NEXT_PUBLIC_CONVEX_URL` | Run `npx convex dev` (writes it to `.env.local`); restart `npm run dev`. |
-| Host sign-in works but Convex calls are unauthorized | The Clerk JWT template must be named `convex`, and `CLERK_JWT_ISSUER_DOMAIN` must be set **in the Convex dashboard**. |
-| Share links/QR point at `localhost` in prod | Set `NEXT_PUBLIC_APP_URL` **in the Convex dashboard** (it builds the URL server-side), not just in Vercel. |
-| `convex/_generated` types look stale after editing functions | Run `npx convex dev` (or `npx convex codegen` against your dev deployment) to regenerate. |
+| Host sign-in works but Convex calls are unauthorized | The Clerk JWT template must be named `convex`, and `CLERK_JWT_ISSUER_DOMAIN` must be set **in the Convex dashboard** (matching dev vs prod). |
+| Share links/QR point at `localhost` in prod | Set `NEXT_PUBLIC_APP_URL` **on the Convex production deployment** (it builds the URL server-side). |
+| Vercel production build fails at `convex deploy` | `CONVEX_DEPLOY_KEY` (a **Production** deploy key) must be set in Vercel's **Production** scope. |
+| Preview deploy loads but has no backend | Set `NEXT_PUBLIC_CONVEX_URL` (your dev URL) for Vercel's **Preview** scope — previews don't deploy Convex. |
+| `convex/_generated` types look stale after editing functions | Run `npx convex dev` (or `npx convex codegen`) to regenerate. |
 | Players can join but the game won't start | You need at least the game's `minPlayers` (Phase Cards = 2). |
-| Build fails on Clerk during prerender | Ensure `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is present in the build environment. |
+| CI build fails on Clerk during prerender | Ensure `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is present in the build environment. |

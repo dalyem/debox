@@ -1,4 +1,4 @@
-name: CI / CD
+name: CI
 
 on:
   push:
@@ -10,10 +10,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Deploys are owned by Vercel's Git integration:
+#   • Production build runs `npx convex deploy --cmd 'npm run build'`
+#     (see vercel.json), so Convex prod is deployed on every production build.
+#   • Preview builds just `next build` and never touch prod.
+# This workflow is the quality gate that runs before any deploy.
 jobs:
-  # ---------------------------------------------------------------------------
-  # Quality gate — runs on every PR and every push to main. No secrets needed.
-  # ---------------------------------------------------------------------------
   verify:
     name: Lint · Typecheck · Test · Build
     runs-on: ubuntu-latest
@@ -46,56 +48,3 @@ jobs:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlcmsuZGVib3gubG9jYWwk
           CLERK_SECRET_KEY: sk_test_ci0000000000000000000000000000000
           NEXT_PUBLIC_APP_URL: https://debox.example.com
-
-  # ---------------------------------------------------------------------------
-  # Deploy — only on push to main, after the quality gate is green.
-  # Each step self-skips until its secret is configured, so the very first push
-  # stays green. Add the secrets (see docs/DEPLOYMENT.md §7) to enable deploys.
-  # Convex goes out first so the new schema/API is live before the frontend.
-  # ---------------------------------------------------------------------------
-  deploy:
-    name: Deploy (Convex + Vercel)
-    needs: verify
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment: production
-    env:
-      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Note configuration status
-        run: |
-          echo "Convex deploy: ${{ env.CONVEX_DEPLOY_KEY != '' && 'enabled' || 'skipped (set CONVEX_DEPLOY_KEY)' }}"
-          echo "Vercel deploy: ${{ env.VERCEL_TOKEN != '' && 'enabled' || 'skipped (set VERCEL_TOKEN / VERCEL_ORG_ID / VERCEL_PROJECT_ID)' }}"
-
-      - name: Deploy Convex (production)
-        if: ${{ env.CONVEX_DEPLOY_KEY != '' }}
-        run: npx convex deploy -y
-
-      - name: Install Vercel CLI
-        if: ${{ env.VERCEL_TOKEN != '' }}
-        run: npm i -g vercel@latest
-
-      - name: Pull Vercel project settings
-        if: ${{ env.VERCEL_TOKEN != '' }}
-        run: vercel pull --yes --environment=production --token=$VERCEL_TOKEN
-
-      - name: Build for Vercel
-        if: ${{ env.VERCEL_TOKEN != '' }}
-        run: vercel build --prod --token=$VERCEL_TOKEN
-
-      - name: Deploy to Vercel (production)
-        if: ${{ env.VERCEL_TOKEN != '' }}
-        run: vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
