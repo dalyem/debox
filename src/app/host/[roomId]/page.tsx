@@ -1,0 +1,234 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import { useMutation, useQuery } from "convex/react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Pause, Play, Square, LayoutDashboard, FastForward } from "lucide-react";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import type { PublicGameView } from "@/lib/games/phase-cards/types";
+import type { GameResult } from "@/lib/games/types";
+import { StageShell } from "@/components/platform/StageShell";
+import { EventToaster } from "@/components/platform/EventToaster";
+import { Wordmark } from "@/components/brand/Logo";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { TvLobby } from "@/components/tv/TvLobby";
+import { PhaseCardsTV } from "@/components/games/phase-cards/PhaseCardsTV";
+import { RoundSummary } from "@/components/games/phase-cards/RoundSummary";
+import { Victory } from "@/components/games/phase-cards/Victory";
+import { ROOM_STATUS_LABELS, type RoomStatus } from "@/lib/platform/types";
+
+export default function HostRoomPage() {
+  const params = useParams<{ roomId: string }>();
+  const roomId = params.roomId as Id<"rooms">;
+
+  const data = useQuery(api.rooms.hostRoom, { roomId });
+  const publicState = useQuery(api.gameplay.publicState, { roomId }) as
+    | PublicGameView
+    | null
+    | undefined;
+
+  const start = useMutation(api.rooms.start);
+  const pause = useMutation(api.rooms.pause);
+  const unpause = useMutation(api.rooms.unpause);
+  const end = useMutation(api.rooms.end);
+  const close = useMutation(api.rooms.close);
+  const nextRound = useMutation(api.rooms.nextRound);
+
+  const [starting, setStarting] = useState(false);
+
+  const nameOf = useMemo(() => {
+    const map = new Map((data?.players ?? []).map((p) => [String(p.playerId), p.displayName]));
+    return (id: string) => map.get(id) ?? "Someone";
+  }, [data?.players]);
+
+  if (data === undefined) {
+    return (
+      <StageShell>
+        <div className="flex flex-1 items-center justify-center gap-3 text-haze">
+          <Spinner /> Loading room…
+        </div>
+      </StageShell>
+    );
+  }
+
+  const status = data.room.status as RoomStatus;
+  const game = data.game;
+  const view = publicState ?? null;
+  const roundOver = view?.status === "round_over";
+  const result = (data.room.result as GameResult | null) ?? null;
+  const isTerminal = status === "ended" || status === "closed" || status === "expired";
+  const showResults = !!result && (isTerminal || view?.status === "game_over");
+
+  return (
+    <StageShell>
+      {/* Header */}
+      <header className="flex items-center justify-between gap-4 px-6 py-4">
+        <div className="flex items-center gap-4">
+          <Wordmark size={32} textClassName="text-2xl" />
+          {game ? (
+            <span className="hidden font-display text-lg text-haze sm:inline">
+              {game.emoji} {game.name}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Badge variant="grape" className="font-mono text-sm tracking-[0.3em]">
+            {data.room.roomCode}
+          </Badge>
+          <Badge variant="muted">{ROOM_STATUS_LABELS[status]}</Badge>
+
+          {(status === "active" || status === "paused") && (
+            <>
+              {roundOver ? (
+                <Button size="sm" variant="secondary" onClick={() => nextRound({ roomId })}>
+                  <FastForward className="size-4" /> Deal now
+                </Button>
+              ) : status === "active" ? (
+                <Button size="sm" variant="secondary" onClick={() => pause({ roomId })}>
+                  <Pause className="size-4" /> Pause
+                </Button>
+              ) : (
+                <Button size="sm" variant="lime" onClick={() => unpause({ roomId })}>
+                  <Play className="size-4" /> Resume
+                </Button>
+              )}
+              <EndGameButton onConfirm={() => end({ roomId })} />
+            </>
+          )}
+
+          {isTerminal ? (
+            <>
+              {status === "ended" ? (
+                <Button size="sm" variant="secondary" onClick={() => close({ roomId })}>
+                  Close room
+                </Button>
+              ) : null}
+              <Button size="sm" variant="primary" asChild>
+                <Link href="/dashboard">
+                  <LayoutDashboard className="size-4" /> Dashboard
+                </Link>
+              </Button>
+            </>
+          ) : null}
+        </div>
+      </header>
+
+      {/* Event notifications */}
+      <div className="pointer-events-none absolute left-1/2 top-20 z-40 -translate-x-1/2">
+        <EventToaster roomId={roomId} nameOf={nameOf} audience="tv" />
+      </div>
+
+      {/* Body */}
+      {status === "lobby" || status === "pending" ? (
+        <TvLobby
+          roomCode={data.room.roomCode}
+          shareUrl={data.room.shareUrl}
+          game={game}
+          players={data.players}
+          minPlayers={data.room.minPlayers}
+          maxPlayers={data.room.maxPlayers}
+          starting={starting}
+          onStart={async () => {
+            setStarting(true);
+            try {
+              await start({ roomId });
+            } finally {
+              setStarting(false);
+            }
+          }}
+        />
+      ) : null}
+
+      {(status === "active" || status === "paused") && view ? (
+        <div className="relative flex flex-1 flex-col">
+          <PhaseCardsTV view={view} />
+
+          <AnimatePresence>
+            {roundOver && view.lastRoundSummary ? (
+              <RoundSummary
+                key="round-summary"
+                summary={view.lastRoundSummary}
+                players={view.players}
+              />
+            ) : null}
+          </AnimatePresence>
+
+          {status === "paused" ? (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="surface-pop px-10 py-8 text-center"
+              >
+                <Pause className="mx-auto size-12 text-grape-bright" />
+                <div className="mt-3 font-display text-3xl font-bold">Paused</div>
+                <p className="text-haze">The host will resume shortly.</p>
+              </motion.div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {showResults && result ? (
+        <Victory result={result} players={view?.players ?? []} />
+      ) : null}
+
+      {(status === "closed" || status === "expired") && !result ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+          <div className="text-6xl">📦</div>
+          <h1 className="font-display text-4xl font-bold">This room is {status}.</h1>
+          <Button asChild variant="primary">
+            <Link href="/dashboard">Back to dashboard</Link>
+          </Button>
+        </div>
+      ) : null}
+    </StageShell>
+  );
+}
+
+function EndGameButton({ onConfirm }: { onConfirm: () => void }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="danger">
+          <Square className="size-4" /> End
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>End the game?</DialogTitle>
+          <DialogDescription>
+            This finishes the game for everyone and shows the final standings. You
+            can&apos;t undo it.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Keep playing</Button>
+          </DialogClose>
+          <DialogClose asChild>
+            <Button variant="danger" onClick={onConfirm}>
+              End game
+            </Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
