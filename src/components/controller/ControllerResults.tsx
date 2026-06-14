@@ -26,7 +26,7 @@ export function ControllerResults({
   const won = result.winners.includes(youId);
 
   return (
-    <div className="flex flex-1 flex-col items-center gap-6 px-5 py-8">
+    <div className="flex min-h-0 flex-1 flex-col items-center gap-6 overflow-y-auto px-5 py-8">
       <motion.div
         initial={{ scale: 0.5, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}

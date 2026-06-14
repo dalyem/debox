@@ -336,6 +336,30 @@ describe("freeze / skip", () => {
       }).ok,
     ).toBe(true);
   });
+
+  it("never lets a player take a Freeze back off the discard pile", () => {
+    const s0 = makeState(
+      {
+        A: player("A", [num("red", 5)]),
+        B: player("B", [num("blue", 5)]),
+      },
+      ["A", "B"],
+      "B",
+      {
+        // A Freeze is sitting face-up on top of the discard pile.
+        discardPile: [num("yellow", 1), freeze(0)],
+        turn: { hasDrawn: false, drewFrom: null },
+      },
+    );
+
+    // Taking the Freeze is rejected; you must draw from the deck instead.
+    expect(engine.validateMove(s0, "B", { type: "draw", source: "discard" }).ok).toBe(false);
+    expect(engine.validateMove(s0, "B", { type: "draw", source: "draw" }).ok).toBe(true);
+
+    // The affordance is also hidden from B's view, so it can't be tapped.
+    const view = engine.getPrivateState(s0, "B", two) as PrivateGameView;
+    expect(view.actions.canDrawFromDiscard).toBe(false);
+  });
 });
 
 describe("endGame standings", () => {

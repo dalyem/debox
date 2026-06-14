@@ -269,36 +269,38 @@ export function PhaseCardsController({
           </div>
 
           {tab === "scores" ? (
-            <div className="flex-1 overflow-y-auto p-3">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
               <Leaderboard players={view.table} youId={you.playerId} />
             </div>
           ) : (
             <>
               {/* Table (scrolls) */}
               <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-3">
-                {/* Your objective */}
-                <div className="surface mb-3 flex items-center justify-between gap-2 p-3">
-                  <div className="min-w-0">
-                    <div className="text-[0.65rem] uppercase tracking-[0.25em] text-haze">
-                      {you.finishedLadder ? "Status" : `Your Phase ${you.phaseIndex}`}
+                {/* Your objective — phase name + objectives side by side */}
+                <div className="surface mb-3 flex items-center gap-3 p-2.5">
+                  <div className="min-w-0 shrink-0 max-w-[40%]">
+                    <div className="text-[0.6rem] uppercase tracking-[0.2em] text-haze">
+                      {you.finishedLadder ? "Status" : `Phase ${you.phaseIndex}`}
                     </div>
-                    <div className="font-display text-lg font-bold">
+                    <div className="truncate font-display text-base font-bold leading-tight">
                       {you.phaseName}
                     </div>
-                    {!you.completedPhase ? (
-                      <ObjectiveStrip
-                        requirements={you.requirements}
-                        size="sm"
-                        className="mt-1.5"
-                      />
-                    ) : null}
                   </div>
+                  {!you.completedPhase ? (
+                    <ObjectiveStrip
+                      requirements={you.requirements}
+                      size="sm"
+                      className="min-w-0 flex-1 justify-end"
+                    />
+                  ) : (
+                    <div className="flex-1" />
+                  )}
                   {a.canLayDown ? (
-                    <Button size="sm" variant="lime" onClick={() => setMode("laydown")}>
+                    <Button size="sm" variant="lime" className="shrink-0" onClick={() => setMode("laydown")}>
                       <Layers className="size-4" /> Build
                     </Button>
                   ) : you.completedPhase ? (
-                    <span className="chip border-lime/40 bg-lime/15 text-lime">
+                    <span className="chip shrink-0 border-lime/40 bg-lime/15 text-lime">
                       Down ✓
                     </span>
                   ) : null}
@@ -353,9 +355,6 @@ export function PhaseCardsController({
                     />
                   ))}
                 </div>
-                <p className="mt-1 text-center text-[0.65rem] text-haze/70">
-                  drag to discard / meld · drag sideways to reorder
-                </p>
               </div>
             </>
           )}

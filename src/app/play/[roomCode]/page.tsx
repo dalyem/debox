@@ -227,7 +227,7 @@ export default function PlayPage() {
             Waiting for the game to start…
           </div>
         ) : priv.status === "round_over" || priv.status === "game_over" ? (
-          <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
             <div className="text-center">
               <div className="text-3xl">🧮</div>
               <div className="font-display text-2xl font-bold">Round complete!</div>

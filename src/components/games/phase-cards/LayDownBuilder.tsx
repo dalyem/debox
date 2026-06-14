@@ -72,11 +72,6 @@ function Slot({
             <PlayingCard card={c} size="sm" />
           </span>
         ))}
-        {cards.length === 0 ? (
-          <span className="text-xs text-haze/70">
-            {isActive ? "drag cards here ↓" : "drag or tap to fill"}
-          </span>
-        ) : null}
       </div>
       <div
         className={cn(
@@ -110,6 +105,10 @@ export function LayDownBuilder({
   const [activeSlot, setActiveSlot] = useState(0);
 
   const assignedIds = useMemo(() => new Set(assignments.flat()), [assignments]);
+  const handLeft = useMemo(
+    () => hand.filter((c) => !assignedIds.has(c.id)),
+    [hand, assignedIds],
+  );
   const groups = assignments.map((ids) =>
     ids.map((id) => handMap.get(id)!).filter(Boolean),
   );
@@ -190,28 +189,28 @@ export function LayDownBuilder({
         </motion.div>
       </div>
 
-      {/* Hand — fanned like the table; drag a card into a slot, or tap the active slot */}
+      {/* Hand — fanned like the table. Cards placed in a slot leave the hand
+          entirely (no ghost); the fan resizes to what's left. */}
       <div className="rounded-2xl bg-black/20 px-2 py-2">
-        <div className="flex items-end justify-center">
-          {hand.map((card, i) => (
-            <div
-              key={card.id}
-              onClick={() => tapAdd(card.id)}
-              className={i > 0 ? "-ml-9" : ""}
-              style={{ zIndex: i }}
-            >
-              <DragCard
-                card={card}
-                size="md"
-                reorderable={false}
-                dimmed={assignedIds.has(card.id)}
-              />
-            </div>
-          ))}
+        <div className="flex min-h-[6rem] items-end justify-center">
+          {handLeft.length === 0 ? (
+            <span className="self-center text-xs text-haze/70">
+              All cards placed — lay it down!
+            </span>
+          ) : (
+            handLeft.map((card, i) => (
+              <motion.div
+                key={card.id}
+                layout
+                onClick={() => tapAdd(card.id)}
+                className={i > 0 ? "-ml-9" : ""}
+                style={{ zIndex: i }}
+              >
+                <DragCard card={card} size="md" reorderable={false} />
+              </motion.div>
+            ))
+          )}
         </div>
-        <p className="mt-1 text-center text-[0.65rem] text-haze/70">
-          drag a card into a slot, or tap to fill the active slot
-        </p>
       </div>
     </div>
   );

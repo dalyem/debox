@@ -36,20 +36,20 @@ export function GamePiles({
   const deckRef = useAnchor("deck");
   const discardRef = useAnchor("discard");
 
+  const bob = { y: [0, -5, 0] };
+  const bobLoop = { repeat: Infinity, duration: 1.6 } as const;
+
   return (
-    <div className="flex items-start justify-center gap-10 py-1">
-      {/* Draw pile */}
+    <div className="flex items-end justify-center gap-12 py-1">
+      {/* Draw pile — bobs when it's your turn to draw; count shown as a badge. */}
       <button
         type="button"
         disabled={!canDrawDeck}
         onClick={onDrawDeck}
-        className="flex flex-col items-center gap-1.5 disabled:cursor-default"
+        className="relative disabled:cursor-default"
+        aria-label={`Draw pile, ${drawCount} cards`}
       >
-        <motion.div
-          ref={deckRef}
-          animate={canDrawDeck ? { y: [0, -5, 0] } : {}}
-          transition={{ repeat: Infinity, duration: 1.6 }}
-        >
+        <motion.div ref={deckRef} animate={canDrawDeck ? bob : {}} transition={bobLoop}>
           <PlayingCard
             card={DECK_BACK}
             size="md"
@@ -57,26 +57,35 @@ export function GamePiles({
             className={cn(canDrawDeck && "ring-2 ring-grape-bright/70")}
           />
         </motion.div>
-        <span className="text-xs text-haze">Deck · {drawCount}</span>
-        <span className="h-3 text-[0.65rem] font-semibold text-grape-bright">
-          {canDrawDeck ? "tap to draw" : ""}
+        <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 rounded-full bg-ink-2 px-2 py-0.5 text-[0.65rem] font-bold tabular-nums text-haze ring-1 ring-white/10">
+          {drawCount}
         </span>
       </button>
 
-      {/* Discard pile — tap to take, or drop a card to discard */}
-      <div
+      {/* Discard pile — bobs when you can take it, pulses a coral ring while
+          waiting for your discard. Drop a card on it to discard. */}
+      <motion.div
         {...dropProps}
+        animate={
+          active ? { scale: 1.06 } : canDiscard ? { scale: [1, 1.04, 1] } : { scale: 1 }
+        }
+        transition={
+          canDiscard && !active ? bobLoop : { type: "spring", stiffness: 400, damping: 25 }
+        }
         className={cn(
-          "flex flex-col items-center gap-1.5 rounded-2xl p-1 transition",
-          active && "scale-105 bg-coral/10 ring-2 ring-coral",
+          "rounded-2xl p-1 transition-colors",
+          active ? "bg-coral/15 ring-2 ring-coral" : canDiscard ? "ring-2 ring-coral/60" : "",
         )}
       >
-        <button
+        <motion.button
           ref={discardRef}
           type="button"
           disabled={!canTakeDiscard}
           onClick={onTakeDiscard}
-          className="disabled:cursor-default"
+          animate={canTakeDiscard ? bob : {}}
+          transition={bobLoop}
+          className="block disabled:cursor-default"
+          aria-label="Discard pile"
         >
           {discardTop ? (
             <PlayingCard
@@ -90,17 +99,8 @@ export function GamePiles({
               style={{ aspectRatio: "5 / 7" }}
             />
           )}
-        </button>
-        <span className="text-xs text-haze">Discard</span>
-        <span
-          className={cn(
-            "h-3 text-[0.65rem] font-semibold",
-            canTakeDiscard ? "text-lagoon" : "text-coral",
-          )}
-        >
-          {canTakeDiscard ? "tap to take" : canDiscard ? "drag here" : ""}
-        </span>
-      </div>
+        </motion.button>
+      </motion.div>
     </div>
   );
 }

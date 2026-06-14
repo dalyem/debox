@@ -68,7 +68,7 @@ export function ControllerLobby({
       .replace(/^https?:\/\//, "")
       .replace(new RegExp(`/${host.roomCode}$`), "");
     return (
-      <div className="flex flex-1 flex-col items-center gap-5 px-6 py-6 text-center">
+      <div className="flex min-h-0 flex-1 flex-col items-center gap-5 overflow-y-auto px-6 py-6 text-center">
         <div>
           <div className="text-xs uppercase tracking-[0.25em] text-haze">
             Get everyone in — go to {joinBase}

@@ -23,17 +23,14 @@ const CORNER_VALUE: Record<string, string> = {
   lg: "text-2xl",
   xl: "text-3xl",
 };
-const CORNER_GLYPH: Record<string, string> = {
-  xs: "text-[0.6rem]",
-  sm: "text-xs",
-  md: "text-sm",
-  lg: "text-lg",
-  xl: "text-xl",
-};
-const CENTER_SIZE: Record<string, string> = {
-  md: "text-4xl",
-  lg: "text-5xl",
-  xl: "text-7xl",
+// The suit/kind symbol, shown in the bottom-left (mirrors the top-left value
+// like a real card) instead of a big center glyph that crowded the numbers.
+const SYMBOL_SIZE: Record<string, string> = {
+  xs: "text-xs",
+  sm: "text-sm",
+  md: "text-xl",
+  lg: "text-2xl",
+  xl: "text-4xl",
 };
 
 export interface PlayingCardProps {
@@ -63,7 +60,7 @@ export function PlayingCard({
   const interactive = !!onClick && !disabled;
   const isNumber = card.kind === "number";
   const corner = isNumber ? String(card.value) : face.glyph;
-  const showCenter = size === "md" || size === "lg" || size === "xl";
+  const showLabel = size === "md" || size === "lg" || size === "xl";
 
   if (faceDown) {
     return (
@@ -118,30 +115,29 @@ export function PlayingCard({
         ...style,
       }}
     >
-      {/* Corner identifier (top-left) */}
-      <span className="absolute left-1 top-0.5 flex flex-col items-center font-bold leading-none">
-        <span className={CORNER_VALUE[size]}>{corner}</span>
-        <span className={cn("opacity-90 leading-none", CORNER_GLYPH[size])}>
-          {face.glyph}
-        </span>
+      {/* Primary readout (top-left) — value for numbers, glyph for wild/freeze */}
+      <span
+        className={cn(
+          "absolute left-1.5 top-1 font-bold leading-none",
+          CORNER_VALUE[size],
+        )}
+      >
+        {corner}
       </span>
 
-      {/* Center accent (larger cards only) */}
-      {showCenter ? (
-        <span
-          className={cn(
-            "absolute inset-0 flex items-center justify-center font-bold opacity-90",
-            CENTER_SIZE[size],
-          )}
-          style={{ textShadow: "0 2px 6px rgba(0,0,0,0.25)" }}
-        >
-          {isNumber ? card.value : face.glyph}
-        </span>
-      ) : null}
+      {/* Suit/kind symbol (bottom-left) */}
+      <span
+        className={cn(
+          "absolute bottom-1 left-1.5 font-bold leading-none opacity-90",
+          SYMBOL_SIZE[size],
+        )}
+      >
+        {face.glyph}
+      </span>
 
-      {/* Label for wild/freeze (larger cards only) */}
-      {!isNumber && showCenter ? (
-        <span className="absolute inset-x-0 bottom-1 text-center text-[0.6rem] font-extrabold uppercase tracking-widest opacity-90">
+      {/* Name for wild/freeze (larger cards only) */}
+      {!isNumber && showLabel ? (
+        <span className="absolute inset-y-0 right-1.5 flex items-center text-[0.6rem] font-extrabold uppercase tracking-widest opacity-90 [writing-mode:vertical-rl]">
           {face.label}
         </span>
       ) : null}

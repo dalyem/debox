@@ -28,7 +28,7 @@ export function ControllerShell({
   children: ReactNode;
 }) {
   return (
-    <StageShell ambient={false} className="flex">
+    <StageShell ambient={false} fill>
       <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <Avatar color={avatar.color} emoji={avatar.emoji} size="sm" />
