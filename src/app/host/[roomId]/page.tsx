@@ -1,11 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Pause, Play, Square, LayoutDashboard, FastForward } from "lucide-react";
+import {
+  Pause,
+  Play,
+  Square,
+  LayoutDashboard,
+  FastForward,
+  LogOut,
+} from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { PublicGameView } from "@/lib/games/phase-cards/types";
@@ -34,6 +41,7 @@ import { ROOM_STATUS_LABELS, type RoomStatus } from "@/lib/platform/types";
 
 export default function HostRoomPage() {
   const params = useParams<{ roomId: string }>();
+  const router = useRouter();
   const roomId = params.roomId as Id<"rooms">;
 
   const data = useQuery(api.rooms.hostRoom, { roomId });
@@ -92,6 +100,17 @@ export default function HostRoomPage() {
             {data.room.roomCode}
           </Badge>
           <Badge variant="muted">{ROOM_STATUS_LABELS[status]}</Badge>
+
+          {!isTerminal ? (
+            <ExitButton
+              playerCount={data.players.length}
+              inGame={status === "active" || status === "paused"}
+              onConfirm={async () => {
+                await close({ roomId });
+                router.push("/dashboard/new");
+              }}
+            />
+          ) : null}
 
           {(status === "active" || status === "paused") && (
             <>
@@ -199,6 +218,59 @@ export default function HostRoomPage() {
         </div>
       ) : null}
     </StageShell>
+  );
+}
+
+function ExitButton({
+  playerCount,
+  inGame,
+  onConfirm,
+}: {
+  playerCount: number;
+  inGame: boolean;
+  onConfirm: () => void | Promise<void>;
+}) {
+  const [leaving, setLeaving] = useState(false);
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" title="Close this room and pick another game">
+          <LogOut className="size-4" /> Exit
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Leave & switch games?</DialogTitle>
+          <DialogDescription>
+            This closes the room{" "}
+            {playerCount > 0
+              ? `and disconnects ${playerCount} ${playerCount === 1 ? "player" : "players"}`
+              : ""}
+            {inGame ? ", ending the current game," : ""} and takes you back to game
+            selection. It can&apos;t be reopened.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Stay here</Button>
+          </DialogClose>
+          <Button
+            variant="danger"
+            disabled={leaving}
+            onClick={async () => {
+              setLeaving(true);
+              try {
+                await onConfirm();
+              } catch {
+                setLeaving(false);
+              }
+            }}
+          >
+            {leaving ? "Closing…" : "Exit to game picker"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

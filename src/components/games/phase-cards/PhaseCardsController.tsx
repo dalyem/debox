@@ -73,7 +73,10 @@ export function PhaseCardsController({
   }, [selectedCard, view.actions.canHit, view.table]);
 
   const freezeTargets = view.table.filter(
-    (t) => t.playerId !== you.playerId && !t.finishedLadder,
+    (t) =>
+      t.playerId !== you.playerId &&
+      !t.finishedLadder &&
+      !view.frozenThisRound.includes(t.playerId),
   );
 
   const reset = () => {

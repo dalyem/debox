@@ -67,6 +67,7 @@ function makeState(
     lastRoundSummary: null,
     winnerIds: [],
     startedAt: 0,
+    skippedThisRound: [],
     ...opts,
   };
 }
@@ -264,6 +265,43 @@ describe("freeze / skip", () => {
         skipTargetPlayerId: "A",
       }).ok,
     ).toBe(false);
+  });
+
+  it("allows only one Skip against a player per round", () => {
+    const s0 = makeState(
+      {
+        A: player("A", [freeze(0), num("red", 5)]),
+        B: player("B", [freeze(1), num("blue", 5)]),
+        C: player("C", [num("yellow", 2)]),
+      },
+      ["A", "B", "C"],
+      "A",
+    );
+    // A freezes C — C is recorded as frozen for this round.
+    const r1 = engine.submitMove(
+      s0,
+      "A",
+      { type: "discard", cardId: "freeze-0", skipTargetPlayerId: "C" },
+      ctx3,
+    );
+    expect(r1.state.skippedThisRound).toContain("C");
+
+    // B's turn: freezing C again is rejected; freezing A (not yet frozen) is fine.
+    const bDrew = engine.submitMove(r1.state, "B", { type: "draw", source: "draw" }, ctx3).state;
+    expect(
+      engine.validateMove(bDrew, "B", {
+        type: "discard",
+        cardId: "freeze-1",
+        skipTargetPlayerId: "C",
+      }).ok,
+    ).toBe(false);
+    expect(
+      engine.validateMove(bDrew, "B", {
+        type: "discard",
+        cardId: "freeze-1",
+        skipTargetPlayerId: "A",
+      }).ok,
+    ).toBe(true);
   });
 });
 

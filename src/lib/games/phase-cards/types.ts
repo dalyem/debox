@@ -74,6 +74,8 @@ export interface PhaseCardsState {
   /** Set once the game is over. */
   winnerIds: string[];
   startedAt: number | null;
+  /** Player ids already frozen (skipped) this round — one Skip per player/round. */
+  skippedThisRound: string[];
 }
 
 /* ---- Moves a controller can submit ------------------------------------- */
@@ -167,4 +169,6 @@ export interface PrivateGameView {
   status: GameRuntimeStatus;
   /** Public table info so the controller can show opponents + targets. */
   table: PublicPlayerView[];
+  /** Player ids already frozen this round (can't be targeted by a Skip again). */
+  frozenThisRound: string[];
 }

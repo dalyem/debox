@@ -109,6 +109,21 @@ function dealRound(
   });
 
   const firstPlayer = rotateStart(state.seatOrder, round - 1);
+
+  // Rule: if the up-card that starts the discard pile is a Freeze (Skip), the
+  // first player's turn is automatically skipped, and that counts as their one
+  // skip for the round.
+  let currentPlayerId = firstPlayer;
+  const skippedThisRound: string[] = [];
+  if (isFreeze(firstDiscard)) {
+    const advanced = advanceTurnOrder(
+      { order: state.seatOrder, currentId: firstPlayer, direction: 1, pendingSkips: {} },
+      { isEligible: (id) => !players[id]!.finishedLadder },
+    );
+    currentPlayerId = advanced.currentId;
+    skippedThisRound.push(firstPlayer);
+  }
+
   return {
     ...state,
     seed,
@@ -118,12 +133,13 @@ function dealRound(
     discardPile: [firstDiscard],
     players,
     turn: {
-      currentPlayerId: firstPlayer,
+      currentPlayerId,
       direction: 1,
       pendingSkips: {},
       hasDrawn: false,
       drewFrom: null,
     },
+    skippedThisRound,
     lastRoundSummary: state.lastRoundSummary,
   };
 }
@@ -378,12 +394,14 @@ function applyDiscard(
   const newHand = p.hand.filter((c) => c.id !== cardId);
   const discardPile = discardCard(state.discardPile, card);
   let pendingSkips = state.turn.pendingSkips;
+  let skippedThisRound = state.skippedThisRound ?? [];
   const events: GameEventOut[] = [
     { type: "card_discard", audience: "all", payload: { playerId, card } },
   ];
 
   if (isFreeze(card) && skipTargetPlayerId) {
     pendingSkips = queueSkip(pendingSkips, skipTargetPlayerId, 1);
+    skippedThisRound = [...skippedThisRound, skipTargetPlayerId];
     events.push({
       type: "freeze",
       audience: "all",
@@ -392,7 +410,12 @@ function applyDiscard(
   }
 
   const players = { ...state.players, [playerId]: { ...p, hand: newHand } };
-  const baseState: PhaseCardsState = { ...state, players, discardPile };
+  const baseState: PhaseCardsState = {
+    ...state,
+    players,
+    discardPile,
+    skippedThisRound,
+  };
 
   if (newHand.length === 0) {
     events.push({ type: "player_out", audience: "all", payload: { playerId } });
@@ -503,15 +526,21 @@ function validate(
       const card = p.hand.find((c) => c.id === move.cardId);
       if (!card) return { ok: false, reason: "You don't hold that card" };
       if (isFreeze(card)) {
+        // One Skip per player per round: a player already frozen this round
+        // can't be targeted again.
+        const alreadySkipped = state.skippedThisRound ?? [];
         const eligibleTargets = state.seatOrder.filter(
-          (id) => id !== playerId && eligibleForTurn(state, id),
+          (id) =>
+            id !== playerId &&
+            eligibleForTurn(state, id) &&
+            !alreadySkipped.includes(id),
         );
         if (eligibleTargets.length > 0) {
           if (!move.skipTargetPlayerId) {
             return { ok: false, reason: "Choose a player to freeze" };
           }
           if (!eligibleTargets.includes(move.skipTargetPlayerId)) {
-            return { ok: false, reason: "You can't freeze that player" };
+            return { ok: false, reason: "You can't freeze that player again this round" };
           }
         }
       }
@@ -592,6 +621,7 @@ export const PhaseCardsEngine: GameEngine<
       lastRoundSummary: null,
       winnerIds: [],
       startedAt: null,
+      skippedThisRound: [],
     };
   },
 
@@ -784,6 +814,7 @@ export const PhaseCardsEngine: GameEngine<
       round: state.round,
       status: state.status,
       table,
+      frozenThisRound: state.skippedThisRound ?? [],
     };
   },
 
