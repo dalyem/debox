@@ -108,11 +108,12 @@ export function PhaseCardsController({
     setOrder((prev) => {
       const from = prev.indexOf(cardId);
       const to = prev.indexOf(overCardId);
-      if (from === -1 || to === -1) return prev;
+      if (from === -1 || to === -1 || from === to) return prev;
       const next = prev.slice();
       next.splice(from, 1);
       next.splice(to, 0, cardId);
-      return next;
+      // Avoid a re-render if nothing actually moved (dragOver fires a lot).
+      return next.every((id, i) => id === prev[i]) ? prev : next;
     });
 
   const phase: PhaseDefinition = {
@@ -144,11 +145,6 @@ export function PhaseCardsController({
   };
 
   const a = view.actions;
-  const hint = !view.isYourTurn
-    ? null
-    : !view.hasDrawn
-      ? "Your turn — tap a pile to draw"
-      : "Drag a card to the discard to end your turn";
 
   return (
     <DragDropProvider onReorder={reorder}>
@@ -287,28 +283,6 @@ export function PhaseCardsController({
 
               {/* Piles (tap to draw / drop to discard) */}
               <div className="border-t border-white/10 bg-ink-2/70 px-3 pt-2 backdrop-blur">
-                {hint ? (
-                  <p className="text-center text-[0.7rem] font-semibold text-haze">
-                    {hint}
-                  </p>
-                ) : (
-                  <p className="flex items-center justify-center gap-2 text-center text-[0.7rem] text-haze">
-                    <Avatar
-                      color={
-                        view.table.find((t) => t.playerId === view.currentPlayerId)
-                          ?.avatar.color ?? "slate"
-                      }
-                      emoji={
-                        view.table.find((t) => t.playerId === view.currentPlayerId)
-                          ?.avatar.emoji ?? "🙂"
-                      }
-                      size="xs"
-                    />
-                    Waiting for{" "}
-                    {view.table.find((t) => t.playerId === view.currentPlayerId)
-                      ?.displayName ?? "…"}
-                  </p>
-                )}
                 <GamePiles
                   drawCount={view.drawCount}
                   discardTop={view.discardTop}
@@ -325,9 +299,13 @@ export function PhaseCardsController({
               <div className="bg-ink-2/90 px-2 pb-2 pt-1 backdrop-blur">
                 <div className="flex items-end justify-center">
                   {orderedCards.map((card, i) => (
-                    <div key={card.id} className={cn(i > 0 && "-ml-9")} style={{ zIndex: i }}>
-                      <DragCard card={card} size="md" />
-                    </div>
+                    <DragCard
+                      key={card.id}
+                      card={card}
+                      size="md"
+                      className={i > 0 ? "-ml-9" : ""}
+                      style={{ zIndex: i }}
+                    />
                   ))}
                 </div>
                 <p className="mt-1 text-center text-[0.65rem] text-haze/70">

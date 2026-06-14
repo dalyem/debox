@@ -48,7 +48,7 @@ export function GamePiles({
         >
           <PlayingCard
             card={DECK_BACK}
-            size="lg"
+            size="md"
             faceDown
             className={cn(canDrawDeck && "ring-2 ring-grape-bright/70")}
           />
@@ -76,12 +76,12 @@ export function GamePiles({
           {discardTop ? (
             <PlayingCard
               card={discardTop}
-              size="lg"
+              size="md"
               className={cn(canTakeDiscard && "ring-2 ring-lagoon/70")}
             />
           ) : (
             <div
-              className="h-32 rounded-xl border-2 border-dashed border-white/20"
+              className="h-24 rounded-xl border-2 border-dashed border-white/20"
               style={{ aspectRatio: "5 / 7" }}
             />
           )}

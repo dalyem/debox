@@ -6,6 +6,7 @@ import type { GameEventOut } from "../../src/lib/games/types";
 import {
   ROOM_ENDED_GRACE_MS,
   ROOM_IDLE_EXPIRY_MS,
+  TURN_BASE_MS,
   type SeatedPlayer,
 } from "../../src/lib/platform/types";
 import { createSeed } from "../../src/lib/platform/rng";
@@ -25,6 +26,8 @@ const ROUND_SUMMARY_PAUSE_MS = 6500;
 interface RuntimeSummary {
   currentPlayerId?: string;
   round?: number;
+  turnSeq?: number;
+  turnDeadline?: number;
 }
 
 export async function seatedPlayers(
@@ -67,6 +70,9 @@ function summarize(
     currentPlayerId:
       typeof pub?.currentPlayerId === "string" ? pub.currentPlayerId : undefined,
     round: typeof pub?.round === "number" ? pub.round : undefined,
+    turnSeq: typeof pub?.turnSeq === "number" ? pub.turnSeq : undefined,
+    turnDeadline:
+      typeof pub?.turnDeadline === "number" ? pub.turnDeadline : undefined,
   };
 }
 
@@ -137,6 +143,7 @@ async function commitStep(
       runtimeStatus: step.status,
       state: serialized,
       currentPlayerId: summary.currentPlayerId,
+      turnSeq: summary.turnSeq,
       round: summary.round ?? existing.round,
       updatedAt: now,
     });
@@ -148,6 +155,7 @@ async function commitStep(
       runtimeStatus: step.status,
       state: serialized,
       currentPlayerId: summary.currentPlayerId,
+      turnSeq: summary.turnSeq,
       round: summary.round ?? 0,
       updatedAt: now,
     });
@@ -177,6 +185,14 @@ async function commitStep(
     );
   } else {
     await touchRoom(ctx, room._id, { round: summary.round });
+    // New turn → arm its timeout (the timeout self-reschedules if the player
+    // extends their deadline by acting). Stale timeouts are ignored by seq.
+    if (summary.turnSeq != null && summary.turnSeq !== existing?.turnSeq) {
+      await ctx.scheduler.runAfter(TURN_BASE_MS, internal.gameplay.turnTimeout, {
+        roomId: room._id,
+        seq: summary.turnSeq,
+      });
+    }
   }
 }
 
@@ -250,6 +266,45 @@ export async function resumeRound(ctx: MutationCtx, room: Doc<"rooms">): Promise
   const state = engine.deserializeState(row.state);
   const players = await seatedPlayers(ctx, room._id);
   const step = engine.resume(state, { players, seed: createSeed(), now: Date.now() });
+  await commitStep(ctx, room, engine, step, players);
+}
+
+/** A turn's timer fired — auto-resolve it, or reschedule if it was extended. */
+export async function runTurnTimeout(
+  ctx: MutationCtx,
+  room: Doc<"rooms">,
+  seq: number,
+): Promise<void> {
+  if (room.status !== "active") return;
+  const engine = getGameOrThrow(room.gameType);
+  if (!engine.autoResolveTurn) return;
+  const row = await getGameRow(ctx, room._id);
+  if (!row || row.runtimeStatus !== "in_progress" || row.turnSeq !== seq) return;
+
+  const state = engine.deserializeState(row.state);
+  const players = await seatedPlayers(ctx, room._id);
+  const pub = engine.getPublicState(state, players) as {
+    currentPlayerId?: string;
+    turnDeadline?: number;
+  };
+  const now = Date.now();
+
+  // The player extended their deadline by acting — wait for the new deadline.
+  if (typeof pub.turnDeadline === "number" && now < pub.turnDeadline - 500) {
+    await ctx.scheduler.runAfter(
+      pub.turnDeadline - now,
+      internal.gameplay.turnTimeout,
+      { roomId: room._id, seq },
+    );
+    return;
+  }
+
+  if (!pub.currentPlayerId) return;
+  const step = engine.autoResolveTurn(state, pub.currentPlayerId, {
+    players,
+    seed: createSeed(),
+    now,
+  });
   await commitStep(ctx, room, engine, step, players);
 }
 

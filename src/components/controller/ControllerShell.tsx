@@ -14,6 +14,7 @@ export function ControllerShell({
   turnLabel,
   error,
   headerRight,
+  timer,
   children,
 }: {
   roomCode: string;
@@ -23,6 +24,7 @@ export function ControllerShell({
   turnLabel?: string;
   error?: string | null;
   headerRight?: ReactNode;
+  timer?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -38,6 +40,7 @@ export function ControllerShell({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {timer}
           {headerRight}
           <Badge variant="grape" className="font-mono tracking-[0.2em]">
             {roomCode}

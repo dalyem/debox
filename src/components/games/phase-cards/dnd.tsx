@@ -8,11 +8,13 @@ import {
   useId,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
-import { motion, type PanInfo } from "framer-motion";
+import { motion } from "framer-motion";
 import type { Card } from "@/lib/cards";
 import { PlayingCard, type PlayingCardProps } from "./PlayingCard";
+import { cn } from "@/lib/utils";
 
 /**
  * A tiny, touch-first drag-and-drop layer built on framer-motion (no extra
@@ -33,6 +35,8 @@ interface DnDApi {
   registerZone: (id: string, zone: Zone) => void;
   unregisterZone: (id: string) => void;
   drop: (card: Card, x: number, y: number) => boolean;
+  /** Called continuously during a hand drag to live-reorder under the pointer. */
+  dragOver: (card: Card, x: number, y: number) => void;
   dragging: Card | null;
   setDragging: (card: Card | null) => void;
 }
@@ -75,18 +79,25 @@ export function DragDropProvider({
           return true;
         }
       }
-      const hid = el.dataset?.handcard;
-      if (hid && hid !== card.id) {
-        reorderRef.current?.(card.id, hid);
-        return true;
-      }
     }
     return false;
   }, []);
 
+  const dragOver = useCallback((card: Card, x: number, y: number) => {
+    const els = document.elementsFromPoint(x, y) as HTMLElement[];
+    for (const el of els) {
+      if (el.dataset?.dropzone) return; // over a play target, don't reorder
+      const hid = el.dataset?.handcard;
+      if (hid && hid !== card.id) {
+        reorderRef.current?.(card.id, hid);
+        return;
+      }
+    }
+  }, []);
+
   return (
     <Ctx.Provider
-      value={{ registerZone, unregisterZone, drop, dragging, setDragging }}
+      value={{ registerZone, unregisterZone, drop, dragOver, dragging, setDragging }}
     >
       {children}
     </Ctx.Provider>
@@ -132,17 +143,29 @@ function clientPoint(e: MouseEvent | TouchEvent | PointerEvent) {
 export function DragCard({
   card,
   draggable = true,
-  ...cardProps
+  reorderable = true,
+  className,
+  style,
+  size,
+  selected,
+  dimmed,
 }: {
   card: Card;
   draggable?: boolean;
-} & Omit<PlayingCardProps, "card" | "onClick">) {
-  const { drop, setDragging } = useDnd();
+  /** When true (default), dragging over other hand cards live-reorders. */
+  reorderable?: boolean;
+  className?: string;
+  style?: CSSProperties;
+  size?: PlayingCardProps["size"];
+  selected?: boolean;
+  dimmed?: boolean;
+}) {
+  const { drop, dragOver, setDragging } = useDnd();
 
   if (!draggable) {
     return (
-      <div data-handcard={card.id}>
-        <PlayingCard card={card} {...cardProps} />
+      <div data-handcard={card.id} className={className} style={style}>
+        <PlayingCard card={card} size={size} selected={selected} dimmed={dimmed} />
       </div>
     );
   }
@@ -150,20 +173,30 @@ export function DragCard({
   return (
     <motion.div
       data-handcard={card.id}
+      layout
       drag
       dragSnapToOrigin
       dragMomentum={false}
       onDragStart={() => setDragging(card)}
-      onDragEnd={(e, _info: PanInfo) => {
+      onDrag={
+        reorderable
+          ? (e) => {
+              const p = clientPoint(e as PointerEvent);
+              dragOver(card, p.x, p.y);
+            }
+          : undefined
+      }
+      onDragEnd={(e) => {
         setDragging(null);
         const p = clientPoint(e as PointerEvent);
         drop(card, p.x, p.y);
       }}
       whileDrag={{ scale: 1.15, zIndex: 100 }}
-      className="relative touch-none"
-      style={{ cursor: "grab" }}
+      transition={{ type: "spring", stiffness: 600, damping: 40 }}
+      className={cn("relative touch-none", className)}
+      style={{ cursor: "grab", ...style }}
     >
-      <PlayingCard card={card} {...cardProps} />
+      <PlayingCard card={card} size={size} selected={selected} dimmed={dimmed} />
     </motion.div>
   );
 }

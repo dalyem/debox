@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 import type { Card, CardColor } from "@/lib/cards";
 import type { SeatedPlayer } from "@/lib/platform/types";
 import { PhaseCardsEngine as engine } from "@/lib/games/phase-cards/engine";
+import { buildLaidGroup } from "@/lib/games/phase-cards/melds";
 import type {
   PhaseCardsPlayer,
   PhaseCardsState,
+  PhaseCardsTurn,
   PrivateGameView,
   PublicGameView,
 } from "@/lib/games/phase-cards/types";
@@ -44,22 +46,17 @@ function makeState(
   players: Record<string, PhaseCardsPlayer>,
   seatOrder: string[],
   currentId: string,
-  opts: Partial<PhaseCardsState> = {},
+  opts: Partial<Omit<PhaseCardsState, "turn">> & {
+    turn?: Partial<PhaseCardsTurn>;
+  } = {},
 ): PhaseCardsState {
+  const { turn: turnOpts, ...rest } = opts;
   return {
     v: 1,
     game: "phase-cards",
     seed: 1,
     round: 1,
     status: "in_progress",
-    turn: {
-      currentPlayerId: currentId,
-      direction: 1,
-      pendingSkips: {},
-      hasDrawn: true,
-      drewFrom: "draw",
-      ...(opts.turn ?? {}),
-    },
     drawPile: [num("blue", 6), num("green", 6, 1), num("yellow", 8)],
     discardPile: [num("yellow", 1)],
     seatOrder,
@@ -68,7 +65,18 @@ function makeState(
     winnerIds: [],
     startedAt: 0,
     skippedThisRound: [],
-    ...opts,
+    ...rest,
+    turn: {
+      currentPlayerId: currentId,
+      direction: 1,
+      pendingSkips: {},
+      hasDrawn: true,
+      drewFrom: "draw",
+      seq: 1,
+      startedAt: 0,
+      deadline: 9_999_999_999_999,
+      ...(turnOpts ?? {}),
+    },
   };
 }
 
@@ -216,6 +224,31 @@ describe("laying down + going out + scoring", () => {
     expect(P(resumed.state, "A").hand).toHaveLength(10);
     expect(P(resumed.state, "A").completedPhase).toBe(false);
     expect(P(resumed.state, "A").phaseIndex).toBe(2);
+  });
+});
+
+describe("going out", () => {
+  it("ends the round when the last card is HIT onto a meld (not just discarded)", () => {
+    const run = buildLaidGroup("run", "Run of 4", [
+      num("red", 5),
+      num("blue", 6),
+      num("green", 7),
+      num("yellow", 8),
+    ]);
+    const A = { ...player("A", [num("red", 9)]), completedPhase: true, laidGroups: [run] };
+    const B = player("B", [num("red", 10)]);
+    const s = makeState({ A, B }, ["A", "B"], "A");
+
+    const res = engine.submitMove(
+      s,
+      "A",
+      { type: "hit", targetPlayerId: "A", groupIndex: 0, cardId: "red-9-0" },
+      ctx2,
+    );
+    expect(res.status).toBe("round_over");
+    expect(P(res.state, "A").hand).toHaveLength(0);
+    expect(res.state.lastRoundSummary?.wentOutPlayerId).toBe("A");
+    expect(P(res.state, "A").phaseIndex).toBe(2); // advanced after going out
   });
 });
 

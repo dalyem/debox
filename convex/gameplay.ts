@@ -6,6 +6,7 @@ import {
   privateView,
   publicView,
   resumeRound,
+  runTurnTimeout,
 } from "./lib/engine";
 
 /**
@@ -62,5 +63,15 @@ export const resumeAfterRound = internalMutation({
     const room = await ctx.db.get(roomId);
     if (!room) return;
     await resumeRound(ctx, room);
+  },
+});
+
+/** Scheduled: a turn's timer expired — auto-resolve it (or reschedule). */
+export const turnTimeout = internalMutation({
+  args: { roomId: v.id("rooms"), seq: v.number() },
+  handler: async (ctx, { roomId, seq }) => {
+    const room = await ctx.db.get(roomId);
+    if (!room) return;
+    await runTurnTimeout(ctx, room, seq);
   },
 });

@@ -120,6 +120,13 @@ export interface GameEngine<State = unknown, Move = unknown, Config = unknown> {
    */
   resume?(state: State, ctx: GameContext): GameStepResult<State>;
 
+  /**
+   * Optional: the platform calls this when a player's turn timer expires. The
+   * game should make a minimal legal move (e.g. auto-draw then auto-discard) to
+   * end the stalled turn. Games without timed turns can omit it.
+   */
+  autoResolveTurn?(state: State, playerId: string, ctx: GameContext): GameStepResult<State>;
+
   /** Finalize the game and compute standings/winners. */
   endGame(state: State): GameResult;
 

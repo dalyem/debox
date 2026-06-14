@@ -94,3 +94,11 @@ export const ROOM_EMPTY_LOBBY_EXPIRY_MS = 1000 * 60 * 30; // 30 minutes
 export const ROOM_ENDED_GRACE_MS = 1000 * 60 * 30; // 30 minutes
 /** A player is considered disconnected after missing heartbeats this long. */
 export const PLAYER_HEARTBEAT_TIMEOUT_MS = 1000 * 45;
+
+/* ---- Turn pacing (shared by the game engine + the server scheduler) ---- */
+/** Base time a player gets per turn. */
+export const TURN_BASE_MS = 1000 * 120;
+/** Hard cap on a single turn even with activity-based extensions. */
+export const TURN_MAX_MS = 1000 * 180;
+/** When a player acts late in their turn, push the deadline out by this much. */
+export const TURN_GRACE_MS = 1000 * 30;

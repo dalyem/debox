@@ -107,6 +107,8 @@ export default defineSchema({
     /** Engine-serialized state (JSON string). Never sent raw to clients. */
     state: v.string(),
     currentPlayerId: v.optional(v.string()),
+    /** Monotonic turn id — used to schedule/expire per-turn timers. */
+    turnSeq: v.optional(v.number()),
     round: v.number(),
     updatedAt: v.number(),
   }).index("by_room", ["roomId"]),

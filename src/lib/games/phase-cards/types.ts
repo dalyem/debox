@@ -58,6 +58,12 @@ export interface PhaseCardsTurn {
   hasDrawn: boolean;
   /** Snapshot of where the turn's drawn card came from (for the event feed). */
   drewFrom: "draw" | "discard" | null;
+  /** Monotonic id for this turn — used to expire stale turn timers. */
+  seq: number;
+  /** Timestamp the turn began. */
+  startedAt: number;
+  /** Timestamp the turn auto-resolves if the player hasn't acted. */
+  deadline: number;
 }
 
 export interface PhaseCardsState {
@@ -139,6 +145,9 @@ export interface PublicGameView {
   players: PublicPlayerView[];
   lastRoundSummary: RoundSummary | null;
   winnerIds: string[];
+  /** Current turn's auto-resolve deadline + id (for timers + the scheduler). */
+  turnDeadline: number;
+  turnSeq: number;
 }
 
 export interface PrivateGameView {
@@ -158,6 +167,8 @@ export interface PrivateGameView {
   isYourTurn: boolean;
   currentPlayerId: string;
   hasDrawn: boolean;
+  /** Current turn's auto-resolve deadline (ms epoch) for the countdown timer. */
+  turnDeadline: number;
   /** Allowed action flags for quick UI gating. */
   actions: {
     canDraw: boolean;

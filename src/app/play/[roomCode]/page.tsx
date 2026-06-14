@@ -23,6 +23,8 @@ import { ControllerResults } from "@/components/controller/ControllerResults";
 import { PhaseCardsController } from "@/components/games/phase-cards/PhaseCardsController";
 import { Leaderboard } from "@/components/games/phase-cards/Leaderboard";
 import { FreezeFlash } from "@/components/games/phase-cards/FreezeFlash";
+import { TurnTimer } from "@/components/games/phase-cards/TurnTimer";
+import { YourTurnToast } from "@/components/games/phase-cards/YourTurnToast";
 import { ROOM_STATUS_LABELS, type RoomStatus } from "@/lib/platform/types";
 
 function FullScreenSpinner({ label }: { label: string }) {
@@ -164,6 +166,8 @@ export default function PlayPage() {
       </>
     ) : null;
 
+  const gameLive = status === "active" && !!priv && priv.status === "in_progress";
+
   return (
     <ControllerShell
       roomCode={roomCode}
@@ -173,7 +177,14 @@ export default function PlayPage() {
       turnLabel={turnLabel}
       error={error}
       headerRight={hostHeader}
+      timer={
+        gameLive && priv ? (
+          <TurnTimer deadline={priv.turnDeadline} active={priv.isYourTurn} />
+        ) : null
+      }
     >
+      <YourTurnToast active={gameLive && !!priv && priv.isYourTurn} />
+
       {status === "lobby" || status === "pending" ? (
         <ControllerLobby
           displayName={me.displayName}

@@ -63,6 +63,8 @@ export function formatEvent(
     }
     case "player_out":
       return { emoji: "🏁", text: `${pid("playerId")} went out!`, tone: "big" };
+    case "turn_timeout":
+      return { emoji: "⏰", text: `${pid("playerId")} ran out of time`, tone: "warn" };
     case "round_start":
       return { emoji: "🔄", text: `Round ${p.round} — new deal`, tone: "info" };
     case "game_pause":

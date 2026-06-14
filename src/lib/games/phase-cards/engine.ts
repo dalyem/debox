@@ -1,4 +1,9 @@
-import type { SeatedPlayer } from "../../platform/types";
+import {
+  type SeatedPlayer,
+  TURN_BASE_MS,
+  TURN_GRACE_MS,
+  TURN_MAX_MS,
+} from "../../platform/types";
 import { makeRng } from "../../platform/rng";
 import {
   advanceTurn as advanceTurnOrder,
@@ -42,6 +47,7 @@ import type {
   PhaseCardsMove,
   PhaseCardsPlayer,
   PhaseCardsState,
+  PhaseCardsTurn,
   PublicGameView,
   PublicPlayerView,
   PrivateGameView,
@@ -87,11 +93,43 @@ function eligibleForTurn(state: PhaseCardsState, id: string): boolean {
   return !!p && !p.finishedLadder;
 }
 
+/** Build a fresh turn (new deadline + monotonic seq). */
+function startTurn(
+  currentPlayerId: string,
+  direction: 1 | -1,
+  pendingSkips: Record<string, number>,
+  prevSeq: number,
+  now: number,
+): PhaseCardsTurn {
+  return {
+    currentPlayerId,
+    direction,
+    pendingSkips,
+    hasDrawn: false,
+    drewFrom: null,
+    seq: prevSeq + 1,
+    startedAt: now,
+    deadline: now + TURN_BASE_MS,
+  };
+}
+
+/** Push a turn's deadline out when the player acts late (capped). */
+function extendDeadline(turn: PhaseCardsTurn, now: number): PhaseCardsTurn {
+  return {
+    ...turn,
+    deadline: Math.min(
+      turn.startedAt + TURN_MAX_MS,
+      Math.max(turn.deadline, now + TURN_GRACE_MS),
+    ),
+  };
+}
+
 /** Deal a fresh round into `state` using `seed`. Pure. */
 function dealRound(
   state: PhaseCardsState,
   round: number,
   seed: number,
+  now: number,
 ): PhaseCardsState {
   const rng = makeRng(seed >>> 0);
   const deck = shuffleDeck(createDeck(DEBOX_DECK), rng);
@@ -133,13 +171,7 @@ function dealRound(
     drawPile: drawAfter,
     discardPile: [firstDiscard],
     players,
-    turn: {
-      currentPlayerId,
-      direction: 1,
-      pendingSkips: {},
-      hasDrawn: false,
-      drewFrom: null,
-    },
+    turn: startTurn(currentPlayerId, 1, {}, state.turn.seq, now),
     skippedThisRound,
     lastRoundSummary: state.lastRoundSummary,
   };
@@ -244,6 +276,7 @@ function applyDraw(
   state: PhaseCardsState,
   playerId: string,
   source: "draw" | "discard",
+  now: number,
 ): GameStepResult<PhaseCardsState> {
   let drawPile = state.drawPile;
   let discardPile = state.discardPile;
@@ -279,7 +312,10 @@ function applyDraw(
       drawPile,
       discardPile,
       players,
-      turn: { ...state.turn, hasDrawn: true, drewFrom: source },
+      turn: extendDeadline(
+        { ...state.turn, hasDrawn: true, drewFrom: source },
+        now,
+      ),
     },
     // Only a discard-pile draw is public knowledge (everyone saw the card).
     events: [
@@ -297,6 +333,7 @@ function applyLayDown(
   state: PhaseCardsState,
   playerId: string,
   groupIds: string[][],
+  now: number,
 ): GameStepResult<PhaseCardsState> {
   const p = getP(state, playerId);
   const phase = getPhase(p.phaseIndex);
@@ -321,7 +358,11 @@ function applyLayDown(
   };
 
   return {
-    state: { ...state, players },
+    state: {
+      ...state,
+      players,
+      turn: extendDeadline(state.turn, now),
+    },
     events: [
       {
         type: "phase_complete",
@@ -339,6 +380,7 @@ function applyHit(
   targetPlayerId: string,
   groupIndex: number,
   cardId: string,
+  now: number,
 ): GameStepResult<PhaseCardsState> {
   const players: Record<string, PhaseCardsPlayer> = { ...state.players };
   const hitterBefore = getP(state, playerId);
@@ -357,20 +399,26 @@ function applyHit(
   };
 
   const hitter = players[playerId]!; // may reflect the target update if self-hit
-  players[playerId] = {
-    ...hitter,
-    hand: hitter.hand.filter((c) => c.id !== cardId),
+  const newHand = hitter.hand.filter((c) => c.id !== cardId);
+  players[playerId] = { ...hitter, hand: newHand };
+
+  const hitEvent: GameEventOut = {
+    type: "hit",
+    audience: "all",
+    payload: { playerId, targetPlayerId, groupIndex, card },
   };
 
+  // Going out by hitting your last card ends the round (Phase 10 rule).
+  if (newHand.length === 0) {
+    return endRound({ ...state, players }, playerId, [
+      hitEvent,
+      { type: "player_out", audience: "all", payload: { playerId } },
+    ]);
+  }
+
   return {
-    state: { ...state, players },
-    events: [
-      {
-        type: "hit",
-        audience: "all",
-        payload: { playerId, targetPlayerId, groupIndex, card },
-      },
-    ],
+    state: { ...state, players, turn: extendDeadline(state.turn, now) },
+    events: [hitEvent],
     status: "in_progress",
   };
 }
@@ -380,6 +428,7 @@ function applyDiscard(
   playerId: string,
   cardId: string,
   skipTargetPlayerId: string | undefined,
+  now: number,
 ): GameStepResult<PhaseCardsState> {
   const p = getP(state, playerId);
   const card = p.hand.find((c) => c.id === cardId);
@@ -433,13 +482,7 @@ function applyDiscard(
   return {
     state: {
       ...baseState,
-      turn: {
-        currentPlayerId: nextId,
-        direction: state.turn.direction,
-        pendingSkips: nextSkips,
-        hasDrawn: false,
-        drewFrom: null,
-      },
+      turn: startTurn(nextId, state.turn.direction, nextSkips, state.turn.seq, now),
     },
     events,
     status: "in_progress",
@@ -607,6 +650,9 @@ export const PhaseCardsEngine: GameEngine<
         pendingSkips: {},
         hasDrawn: false,
         drewFrom: null,
+        seq: 0,
+        startedAt: 0,
+        deadline: 0,
       },
       drawPile: [],
       discardPile: [],
@@ -633,7 +679,7 @@ export const PhaseCardsEngine: GameEngine<
   },
 
   startGame(state, ctx) {
-    const dealt = dealRound({ ...state, startedAt: ctx.now }, 1, ctx.seed);
+    const dealt = dealRound({ ...state, startedAt: ctx.now }, 1, ctx.seed, ctx.now);
     return {
       state: dealt,
       events: [
@@ -652,14 +698,14 @@ export const PhaseCardsEngine: GameEngine<
     return validate(state, playerId, move);
   },
 
-  submitMove(state, playerId, move, _ctx) {
+  submitMove(state, playerId, move, ctx) {
     const check = validate(state, playerId, move);
     if (!check.ok) throw new Error(check.reason ?? "Illegal move");
     switch (move.type) {
       case "draw":
-        return applyDraw(state, playerId, move.source);
+        return applyDraw(state, playerId, move.source, ctx.now);
       case "layDown":
-        return applyLayDown(state, playerId, move.groups);
+        return applyLayDown(state, playerId, move.groups, ctx.now);
       case "hit":
         return applyHit(
           state,
@@ -667,13 +713,20 @@ export const PhaseCardsEngine: GameEngine<
           move.targetPlayerId,
           move.groupIndex,
           move.cardId,
+          ctx.now,
         );
       case "discard":
-        return applyDiscard(state, playerId, move.cardId, move.skipTargetPlayerId);
+        return applyDiscard(
+          state,
+          playerId,
+          move.cardId,
+          move.skipTargetPlayerId,
+          ctx.now,
+        );
     }
   },
 
-  advanceTurn(state) {
+  advanceTurn(state, ctx) {
     const { nextId, pendingSkips } = passTurn(
       state,
       state.turn.currentPlayerId,
@@ -681,13 +734,13 @@ export const PhaseCardsEngine: GameEngine<
     );
     return {
       ...state,
-      turn: {
-        currentPlayerId: nextId,
-        direction: state.turn.direction,
+      turn: startTurn(
+        nextId,
+        state.turn.direction,
         pendingSkips,
-        hasDrawn: false,
-        drewFrom: null,
-      },
+        state.turn.seq,
+        ctx.now,
+      ),
     };
   },
 
@@ -696,7 +749,7 @@ export const PhaseCardsEngine: GameEngine<
       return { state, events: [], status: state.status };
     }
     const nextRound = state.round + 1;
-    const dealt = dealRound(state, nextRound, ctx.seed);
+    const dealt = dealRound(state, nextRound, ctx.seed, ctx.now);
     return {
       state: dealt,
       events: [
@@ -708,6 +761,49 @@ export const PhaseCardsEngine: GameEngine<
         },
       ],
       status: "in_progress",
+    };
+  },
+
+  autoResolveTurn(state, playerId, ctx) {
+    if (state.status !== "in_progress" || state.turn.currentPlayerId !== playerId) {
+      return { state, events: [], status: state.status };
+    }
+    const rng = makeRng(ctx.seed >>> 0);
+    let working = state;
+    const events: GameEventOut[] = [
+      { type: "turn_timeout", audience: "all", payload: { playerId } },
+    ];
+
+    // Auto-draw if they hadn't drawn yet.
+    if (
+      !working.turn.hasDrawn &&
+      (working.drawPile.length > 0 || working.discardPile.length > 1)
+    ) {
+      const drawStep = applyDraw(working, playerId, "draw", ctx.now);
+      working = drawStep.state;
+      events.push(...drawStep.events);
+    }
+
+    // Auto-discard a random card to end the turn.
+    const hand = getP(working, playerId).hand;
+    if (hand.length === 0) {
+      return { state: working, events, status: working.status };
+    }
+    const card = hand[rng.int(hand.length)]!;
+    let skipTarget: string | undefined;
+    if (isFreeze(card)) {
+      const skipped = working.skippedThisRound ?? [];
+      const targets = working.seatOrder.filter(
+        (id) =>
+          id !== playerId && eligibleForTurn(working, id) && !skipped.includes(id),
+      );
+      if (targets.length > 0) skipTarget = targets[rng.int(targets.length)];
+    }
+    const discardStep = applyDiscard(working, playerId, card.id, skipTarget, ctx.now);
+    return {
+      state: discardStep.state,
+      events: [...events, ...discardStep.events],
+      status: discardStep.status,
     };
   },
 
@@ -758,6 +854,8 @@ export const PhaseCardsEngine: GameEngine<
       players: publicPlayers(state, players),
       lastRoundSummary: state.lastRoundSummary,
       winnerIds: state.winnerIds,
+      turnDeadline: state.turn.deadline,
+      turnSeq: state.turn.seq,
     };
   },
 
@@ -791,6 +889,7 @@ export const PhaseCardsEngine: GameEngine<
       },
       isYourTurn,
       currentPlayerId: state.turn.currentPlayerId,
+      turnDeadline: state.turn.deadline,
       hasDrawn,
       actions: {
         canDraw:

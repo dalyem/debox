@@ -159,7 +159,12 @@ export function LayDownBuilder({
         <div className="flex flex-wrap items-center justify-center gap-1.5">
           {hand.map((card) => (
             <div key={card.id} onClick={() => tapAdd(card.id)}>
-              <DragCard card={card} size="md" dimmed={assignedIds.has(card.id)} />
+              <DragCard
+                card={card}
+                size="md"
+                reorderable={false}
+                dimmed={assignedIds.has(card.id)}
+              />
             </div>
           ))}
         </div>
