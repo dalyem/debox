@@ -11,7 +11,17 @@ import { PlayingCard } from "./PlayingCard";
 import { MeldRow } from "./MeldRow";
 import { DiscardPileStack, DrawPileStack } from "./Piles";
 import { PhaseLadder } from "./PhaseLadder";
+import { useAnchor } from "./anchors";
+import type { LaidGroup } from "@/lib/games/phase-cards/types";
 import { cn } from "@/lib/utils";
+
+function TvMeld({ group, anchorKey }: { group: LaidGroup; anchorKey: string }) {
+  return (
+    <div ref={useAnchor(anchorKey)}>
+      <MeldRow group={group} size="xs" />
+    </div>
+  );
+}
 
 function HandStack({ count }: { count: number }) {
   const shown = Math.min(count, 8);
@@ -36,8 +46,11 @@ function HandStack({ count }: { count: number }) {
 }
 
 function TvSeat({ p, active }: { p: PublicPlayerView; active: boolean }) {
+  const seatRef = useAnchor(`player:${p.playerId}`);
+  const meldsRef = useAnchor(`melds:${p.playerId}`);
   return (
     <motion.div
+      ref={seatRef}
       layout
       animate={{ scale: active ? 1.03 : 1 }}
       transition={{ type: "spring", stiffness: 320, damping: 26 }}
@@ -88,9 +101,9 @@ function TvSeat({ p, active }: { p: PublicPlayerView; active: boolean }) {
       </div>
 
       {p.laidGroups.length > 0 ? (
-        <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-2xl bg-black/20 p-2">
+        <div ref={meldsRef} className="flex flex-wrap gap-x-4 gap-y-2 rounded-2xl bg-black/20 p-2">
           {p.laidGroups.map((g, i) => (
-            <MeldRow key={i} group={g} size="xs" />
+            <TvMeld key={i} group={g} anchorKey={`meld:${p.playerId}:${i}`} />
           ))}
         </div>
       ) : null}
@@ -100,6 +113,8 @@ function TvSeat({ p, active }: { p: PublicPlayerView; active: boolean }) {
 
 export function PhaseCardsTV({ view }: { view: PublicGameView }) {
   const current = view.players.find((p) => p.playerId === view.currentPlayerId);
+  const deckAnchor = useAnchor("deck");
+  const discardAnchor = useAnchor("discard");
 
   return (
     <div className="flex flex-1 flex-col gap-6 px-6 pb-8">
@@ -140,8 +155,12 @@ export function PhaseCardsTV({ view }: { view: PublicGameView }) {
         </div>
 
         <div className="flex items-start justify-center gap-8">
-          <DrawPileStack count={view.drawCount} size="lg" />
-          <DiscardPileStack top={view.discardTop} count={view.discardCount} size="lg" />
+          <div ref={deckAnchor}>
+            <DrawPileStack count={view.drawCount} size="lg" />
+          </div>
+          <div ref={discardAnchor}>
+            <DiscardPileStack top={view.discardTop} count={view.discardCount} size="lg" />
+          </div>
         </div>
 
         <div className="hidden flex-col items-end gap-2 lg:flex">

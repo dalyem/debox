@@ -35,6 +35,8 @@ import {
 } from "@/components/ui/dialog";
 import { TvLobby } from "@/components/tv/TvLobby";
 import { PhaseCardsTV } from "@/components/games/phase-cards/PhaseCardsTV";
+import { AnchorProvider } from "@/components/games/phase-cards/anchors";
+import { CardFlights } from "@/components/games/phase-cards/CardFlights";
 import { RoundSummary } from "@/components/games/phase-cards/RoundSummary";
 import { Victory } from "@/components/games/phase-cards/Victory";
 import { ROOM_STATUS_LABELS, type RoomStatus } from "@/lib/platform/types";
@@ -83,7 +85,11 @@ export default function HostRoomPage() {
   const showResults = !!result && (isTerminal || view?.status === "game_over");
 
   return (
+    <AnchorProvider>
     <StageShell>
+      {(status === "active" || status === "paused") && view ? (
+        <CardFlights roomId={roomId} perspectiveId={null} />
+      ) : null}
       {/* Header */}
       <header className="flex items-center justify-between gap-4 px-6 py-4">
         <div className="flex items-center gap-4">
@@ -218,6 +224,7 @@ export default function HostRoomPage() {
         </div>
       ) : null}
     </StageShell>
+    </AnchorProvider>
   );
 }
 

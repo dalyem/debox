@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import type { Card } from "@/lib/cards";
 import { PlayingCard } from "./PlayingCard";
 import { useDropZone } from "./dnd";
+import { useAnchor } from "./anchors";
 import { cn } from "@/lib/utils";
 
 const DECK_BACK: Card = { id: "deck-back", kind: "number", color: "blue", value: 0 };
@@ -32,6 +33,8 @@ export function GamePiles({
     () => canDiscard,
     (card) => onDiscardCard(card),
   );
+  const deckRef = useAnchor("deck");
+  const discardRef = useAnchor("discard");
 
   return (
     <div className="flex items-start justify-center gap-10 py-1">
@@ -43,6 +46,7 @@ export function GamePiles({
         className="flex flex-col items-center gap-1.5 disabled:cursor-default"
       >
         <motion.div
+          ref={deckRef}
           animate={canDrawDeck ? { y: [0, -5, 0] } : {}}
           transition={{ repeat: Infinity, duration: 1.6 }}
         >
@@ -68,6 +72,7 @@ export function GamePiles({
         )}
       >
         <button
+          ref={discardRef}
           type="button"
           disabled={!canTakeDiscard}
           onClick={onTakeDiscard}

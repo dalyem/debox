@@ -25,6 +25,8 @@ import { Leaderboard } from "@/components/games/phase-cards/Leaderboard";
 import { FreezeFlash } from "@/components/games/phase-cards/FreezeFlash";
 import { TurnTimer } from "@/components/games/phase-cards/TurnTimer";
 import { YourTurnToast } from "@/components/games/phase-cards/YourTurnToast";
+import { AnchorProvider } from "@/components/games/phase-cards/anchors";
+import { CardFlights } from "@/components/games/phase-cards/CardFlights";
 import { ROOM_STATUS_LABELS, type RoomStatus } from "@/lib/platform/types";
 
 function FullScreenSpinner({ label }: { label: string }) {
@@ -169,6 +171,7 @@ export default function PlayPage() {
   const gameLive = status === "active" && !!priv && priv.status === "in_progress";
 
   return (
+    <AnchorProvider>
     <ControllerShell
       roomCode={roomCode}
       displayName={me.displayName}
@@ -270,5 +273,9 @@ export default function PlayPage() {
         )
       ) : null}
     </ControllerShell>
+      {gameLive ? (
+        <CardFlights roomId={String(rid)} perspectiveId={String(me.playerId)} />
+      ) : null}
+    </AnchorProvider>
   );
 }

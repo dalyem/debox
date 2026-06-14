@@ -71,6 +71,9 @@ export function DragDropProvider({
   const drop = useCallback((card: Card, x: number, y: number) => {
     const els = document.elementsFromPoint(x, y) as HTMLElement[];
     for (const el of els) {
+      // A modal scrim (e.g. the build sheet) blocks drops from falling through
+      // to the play view stacked behind it.
+      if (el.dataset?.dndBarrier !== undefined) return false;
       const zid = el.dataset?.dropzone;
       if (zid) {
         const z = zones.current.get(zid);
@@ -86,6 +89,7 @@ export function DragDropProvider({
   const dragOver = useCallback((card: Card, x: number, y: number) => {
     const els = document.elementsFromPoint(x, y) as HTMLElement[];
     for (const el of els) {
+      if (el.dataset?.dndBarrier !== undefined) return; // behind a modal scrim
       if (el.dataset?.dropzone) return; // over a play target, don't reorder
       const hid = el.dataset?.handcard;
       if (hid && hid !== card.id) {

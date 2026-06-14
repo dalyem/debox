@@ -12,21 +12,25 @@ import type {
   PrivateGameView,
 } from "@/lib/games/phase-cards/types";
 import { DragCard, DragDropProvider, useDropZone } from "./dnd";
+import { useAnchor } from "./anchors";
 import { GamePiles } from "./GamePiles";
 import { MeldRow } from "./MeldRow";
 import { ObjectiveStrip } from "./ObjectiveStrip";
 import { LayDownBuilder } from "./LayDownBuilder";
 import { Leaderboard } from "./Leaderboard";
+import type { PublicPlayerView } from "@/lib/games/phase-cards/types";
 import { Avatar } from "@/components/platform/Avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 function DroppableMeld({
   group,
+  anchorKey,
   canDrop,
   onDrop,
 }: {
   group: LaidGroup;
+  anchorKey: string;
   canDrop: boolean;
   onDrop: (card: Card) => void;
 }) {
@@ -34,15 +38,79 @@ function DroppableMeld({
     (card) => canDrop && canHitLaidGroup(group, card).ok,
     onDrop,
   );
+  const anchorRef = useAnchor(anchorKey);
   return (
     <div
       {...dropProps}
+      ref={anchorRef}
       className={cn(
         "rounded-lg p-0.5 transition",
         active && "scale-105 bg-lime/20 ring-2 ring-lime",
       )}
     >
       <MeldRow group={group} size="sm" />
+    </div>
+  );
+}
+
+function TableRow({
+  p,
+  isCurrent,
+  youId,
+  canHit,
+  onHit,
+}: {
+  p: PublicPlayerView;
+  isCurrent: boolean;
+  youId: string;
+  canHit: boolean;
+  onHit: (groupIndex: number, card: Card) => void;
+}) {
+  const rowRef = useAnchor(`player:${p.playerId}`);
+  const meldsRef = useAnchor(`melds:${p.playerId}`);
+  return (
+    <div
+      ref={rowRef}
+      className={cn(
+        "rounded-2xl border p-2.5",
+        isCurrent ? "border-gold/50 bg-gold/10" : "border-white/10 bg-white/[0.03]",
+        !p.isActive && "opacity-60",
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <Avatar color={p.avatar.color} emoji={p.avatar.emoji} size="xs" active={p.isActive} />
+        <span className="truncate text-sm font-semibold">
+          {p.displayName}
+          {p.playerId === youId ? (
+            <span className="ml-1 text-xs text-grape-bright">(you)</span>
+          ) : null}
+        </span>
+        {isCurrent ? (
+          <span className="rounded-full bg-gold px-1.5 text-[0.6rem] font-bold text-[#3a2400]">
+            NOW
+          </span>
+        ) : null}
+        <span className="ml-auto text-xs text-haze">
+          P{p.phaseIndex} · {p.handCount}🂠
+        </span>
+      </div>
+      {p.laidGroups.length > 0 ? (
+        <div ref={meldsRef} className="mt-2 flex flex-wrap gap-x-3 gap-y-1.5">
+          {p.laidGroups.map((g, gi) => (
+            <DroppableMeld
+              key={gi}
+              group={g}
+              anchorKey={`meld:${p.playerId}:${gi}`}
+              canDrop={canHit}
+              onDrop={(card) => onHit(gi, card)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div ref={meldsRef} className="mt-1 text-xs text-haze/70">
+          nothing down yet
+        </div>
+      )}
     </div>
   );
 }
@@ -145,20 +213,43 @@ export function PhaseCardsController({
   };
 
   const a = view.actions;
+  const handRef = useAnchor("hand");
 
   return (
     <DragDropProvider onReorder={reorder}>
-      {mode === "laydown" ? (
-        <div className="flex flex-col gap-4 px-3 pb-6 pt-3">
-          <LayDownBuilder
-            phase={phase}
-            hand={orderedCards}
-            submitting={submitting}
-            onCancel={() => setMode("play")}
-            onSubmit={(groups) => move({ type: "layDown", groups })}
-          />
-        </div>
-      ) : (
+      {/* Build overlay — table stays visible behind it */}
+      <AnimatePresence>
+        {mode === "laydown" ? (
+          <motion.div
+            data-dnd-barrier=""
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setMode("play")}
+            className="fixed inset-0 z-40 flex flex-col justify-end bg-black/40"
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 320, damping: 32 }}
+              onClick={(e) => e.stopPropagation()}
+              className="surface-pop max-h-[82vh] overflow-y-auto rounded-b-none p-4"
+            >
+              <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-white/20" />
+              <LayDownBuilder
+                phase={phase}
+                hand={orderedCards}
+                submitting={submitting}
+                onCancel={() => setMode("play")}
+                onSubmit={(groups) => move({ type: "layDown", groups })}
+              />
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      {
         <div className="flex min-h-0 flex-1 flex-col">
           {/* Play / Scores tabs */}
           <div className="flex gap-1 px-3 pt-3">
@@ -215,69 +306,23 @@ export function PhaseCardsController({
 
                 {/* Everyone's melds (drop a card on a meld to add to it) */}
                 <div className="flex flex-col gap-2 pb-2">
-                  {view.table.map((p) => {
-                    const isCurrent = p.playerId === view.currentPlayerId;
-                    return (
-                      <div
-                        key={p.playerId}
-                        className={cn(
-                          "rounded-2xl border p-2.5",
-                          isCurrent
-                            ? "border-gold/50 bg-gold/10"
-                            : "border-white/10 bg-white/[0.03]",
-                          !p.isActive && "opacity-60",
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Avatar
-                            color={p.avatar.color}
-                            emoji={p.avatar.emoji}
-                            size="xs"
-                            active={p.isActive}
-                          />
-                          <span className="truncate text-sm font-semibold">
-                            {p.displayName}
-                            {p.playerId === you.playerId ? (
-                              <span className="ml-1 text-xs text-grape-bright">
-                                (you)
-                              </span>
-                            ) : null}
-                          </span>
-                          {isCurrent ? (
-                            <span className="rounded-full bg-gold px-1.5 text-[0.6rem] font-bold text-[#3a2400]">
-                              NOW
-                            </span>
-                          ) : null}
-                          <span className="ml-auto text-xs text-haze">
-                            P{p.phaseIndex} · {p.handCount}🂠
-                          </span>
-                        </div>
-                        {p.laidGroups.length > 0 ? (
-                          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1.5">
-                            {p.laidGroups.map((g, gi) => (
-                              <DroppableMeld
-                                key={gi}
-                                group={g}
-                                canDrop={!!a.canHit}
-                                onDrop={(card) =>
-                                  move({
-                                    type: "hit",
-                                    targetPlayerId: p.playerId,
-                                    groupIndex: gi,
-                                    cardId: card.id,
-                                  })
-                                }
-                              />
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="mt-1 text-xs text-haze/70">
-                            nothing down yet
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {view.table.map((p) => (
+                    <TableRow
+                      key={p.playerId}
+                      p={p}
+                      isCurrent={p.playerId === view.currentPlayerId}
+                      youId={you.playerId}
+                      canHit={!!a.canHit}
+                      onHit={(groupIndex, card) =>
+                        move({
+                          type: "hit",
+                          targetPlayerId: p.playerId,
+                          groupIndex,
+                          cardId: card.id,
+                        })
+                      }
+                    />
+                  ))}
                 </div>
               </div>
 
@@ -297,7 +342,7 @@ export function PhaseCardsController({
 
               {/* Fanned, draggable hand */}
               <div className="bg-ink-2/90 px-2 pb-2 pt-1 backdrop-blur">
-                <div className="flex items-end justify-center">
+                <div ref={handRef} className="flex items-end justify-center">
                   {orderedCards.map((card, i) => (
                     <DragCard
                       key={card.id}
@@ -315,7 +360,7 @@ export function PhaseCardsController({
             </>
           )}
         </div>
-      )}
+      }
 
       {/* Freeze target picker */}
       <AnimatePresence>

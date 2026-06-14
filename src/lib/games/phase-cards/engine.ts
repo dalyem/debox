@@ -367,7 +367,12 @@ function applyLayDown(
       {
         type: "phase_complete",
         audience: "all",
-        payload: { playerId, phaseIndex: p.phaseIndex, phaseName: phase.name },
+        payload: {
+          playerId,
+          phaseIndex: p.phaseIndex,
+          phaseName: phase.name,
+          cards: laidGroups.flatMap((g) => g.cards),
+        },
       },
     ],
     status: "in_progress",

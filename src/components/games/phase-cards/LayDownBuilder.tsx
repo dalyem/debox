@@ -131,14 +131,27 @@ export function LayDownBuilder({
     );
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="text-center">
-        <div className="text-xs uppercase tracking-[0.25em] text-haze">
-          Build Phase {phase.index}
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[0.65rem] uppercase tracking-[0.25em] text-haze">
+            Build Phase {phase.index}
+          </div>
+          <div className="truncate font-display text-lg font-bold leading-tight">
+            {phase.name}
+          </div>
         </div>
-        <div className="font-display text-xl font-bold">{phase.name}</div>
+        <span
+          className={cn(
+            "chip shrink-0",
+            phaseCheck.ok ? "border-lime/40 bg-lime/15 text-lime" : "text-haze",
+          )}
+        >
+          {phaseCheck.ok ? "ready ✓" : "incomplete"}
+        </span>
       </div>
 
+      {/* Objective slots */}
       <div className="flex flex-col gap-2">
         {phase.requirements.map((req, i) => (
           <Slot
@@ -154,21 +167,9 @@ export function LayDownBuilder({
         ))}
       </div>
 
-      {/* Hand — drag a card into a slot, or tap to drop it in the active slot */}
-      <div className="rounded-2xl bg-black/20 p-3">
-        <div className="flex flex-wrap items-center justify-center gap-1.5">
-          {hand.map((card) => (
-            <div key={card.id} onClick={() => tapAdd(card.id)}>
-              <DragCard
-                card={card}
-                size="md"
-                reorderable={false}
-                dimmed={assignedIds.has(card.id)}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
+      {!phaseCheck.ok && assignedIds.size > 0 ? (
+        <p className="text-center text-xs text-coral">{phaseCheck.reason}</p>
+      ) : null}
 
       <div className="flex gap-2">
         <Button variant="outline" className="flex-1" onClick={onCancel}>
@@ -188,9 +189,30 @@ export function LayDownBuilder({
           </Button>
         </motion.div>
       </div>
-      {!phaseCheck.ok && assignedIds.size > 0 ? (
-        <p className="text-center text-xs text-coral">{phaseCheck.reason}</p>
-      ) : null}
+
+      {/* Hand — fanned like the table; drag a card into a slot, or tap the active slot */}
+      <div className="rounded-2xl bg-black/20 px-2 py-2">
+        <div className="flex items-end justify-center">
+          {hand.map((card, i) => (
+            <div
+              key={card.id}
+              onClick={() => tapAdd(card.id)}
+              className={i > 0 ? "-ml-9" : ""}
+              style={{ zIndex: i }}
+            >
+              <DragCard
+                card={card}
+                size="md"
+                reorderable={false}
+                dimmed={assignedIds.has(card.id)}
+              />
+            </div>
+          ))}
+        </div>
+        <p className="mt-1 text-center text-[0.65rem] text-haze/70">
+          drag a card into a slot, or tap to fill the active slot
+        </p>
+      </div>
     </div>
   );
 }
