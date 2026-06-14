@@ -39,6 +39,9 @@ export default defineSchema({
     shareUrl: v.string(),
     gameType: v.string(),
     status: roomStatusValidator,
+    // "tv" = host runs a shared screen (not a player); "player" = host plays on
+    // their phone with no shared screen. Optional for back-compat; defaults "tv".
+    hostMode: v.optional(v.union(v.literal("tv"), v.literal("player"))),
     settings: v.optional(v.any()),
     maxPlayers: v.number(),
     minPlayers: v.number(),
@@ -68,6 +71,8 @@ export default defineSchema({
     avatarEmoji: v.string(),
     seat: v.number(),
     isActive: v.boolean(),
+    /** True for the host's own player row in "player" mode. */
+    isHost: v.optional(v.boolean()),
     joinedAt: v.number(),
     lastSeenAt: v.number(),
     disconnectedAt: v.optional(v.number()),

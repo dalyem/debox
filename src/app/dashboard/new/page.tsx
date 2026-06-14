@@ -4,10 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
-import { Clock, Users } from "lucide-react";
+import { Clock, Smartphone, Tv, Users } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { GameMeta } from "@/lib/games/types";
+import type { HostMode } from "@/lib/platform/types";
 import { cleanError } from "@/lib/platform/errors";
+import { saveGuestSession } from "@/lib/platform/guestSession";
 import { StageShell } from "@/components/platform/StageShell";
 import { DashboardHeader } from "@/components/platform/DashboardHeader";
 import { Button } from "@/components/ui/button";
@@ -20,12 +22,25 @@ export default function NewGamePage() {
   const [creating, setCreating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const onCreate = async (gameType: string) => {
-    setCreating(gameType);
+  const onCreate = async (gameType: string, hostMode: HostMode) => {
+    setCreating(`${gameType}:${hostMode}`);
     setError(null);
     try {
-      const res = await create({ gameType });
-      router.push(`/host/${res.roomId}`);
+      const res = await create({ gameType, hostMode });
+      if (hostMode === "player" && res.hostPlayer) {
+        // Host plays too — store their guest session and drop into the controller.
+        saveGuestSession({
+          roomId: String(res.roomId),
+          roomCode: res.roomCode,
+          playerId: String(res.hostPlayer.playerId),
+          guestToken: res.hostPlayer.guestToken,
+          displayName: res.hostPlayer.displayName,
+          avatar: res.hostPlayer.avatar,
+        });
+        router.push(`/play/${res.roomCode}`);
+      } else {
+        router.push(`/host/${res.roomId}`);
+      }
     } catch (e) {
       setError(cleanError(e));
       setCreating(null);
@@ -38,7 +53,10 @@ export default function NewGamePage() {
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-6">
         <h1 className="font-display text-3xl font-bold">Pick a game</h1>
         <p className="mt-1 text-haze">
-          Choose what to play. We&apos;ll open a room and put the code on the big screen.
+          Choose a game, then how you&apos;re playing:{" "}
+          <span className="text-cream">On a TV</span> (a shared screen, you run it)
+          or <span className="text-cream">On phones</span> (no TV — you play too,
+          everyone on their own phone).
         </p>
 
         {error ? <p className="mt-4 text-sm text-coral">{error}</p> : null}
@@ -75,15 +93,36 @@ export default function NewGamePage() {
                     <Clock className="size-3.5" /> ~{g.estimatedMinutes} min
                   </span>
                 </div>
-                <Button
-                  size="lg"
-                  variant="lime"
-                  className="mt-1 w-full font-display text-lg"
-                  disabled={creating !== null}
-                  onClick={() => onCreate(g.id)}
-                >
-                  {creating === g.id ? "Opening room…" : "Create room"}
-                </Button>
+                <div className="mt-1 grid grid-cols-2 gap-2">
+                  <Button
+                    size="lg"
+                    variant="primary"
+                    className="flex-col gap-0.5 font-display"
+                    disabled={creating !== null}
+                    onClick={() => onCreate(g.id, "tv")}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Tv className="size-4" /> On a TV
+                    </span>
+                    <span className="text-[0.65rem] font-normal opacity-80">
+                      {creating === `${g.id}:tv` ? "Opening…" : "shared screen"}
+                    </span>
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="lime"
+                    className="flex-col gap-0.5 font-display"
+                    disabled={creating !== null}
+                    onClick={() => onCreate(g.id, "player")}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Smartphone className="size-4" /> On phones
+                    </span>
+                    <span className="text-[0.65rem] font-normal opacity-80">
+                      {creating === `${g.id}:player` ? "Opening…" : "you play too"}
+                    </span>
+                  </Button>
+                </div>
               </motion.div>
             ))}
           </div>

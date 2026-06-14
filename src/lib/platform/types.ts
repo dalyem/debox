@@ -79,8 +79,17 @@ export const ROOM_CODE_LENGTH = 4;
 /** Unambiguous alphabet — no 0/O/1/I/L to keep codes readable on a TV. */
 export const ROOM_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
+/**
+ * How the host participates:
+ *  - "tv": host runs a shared screen (TV) and is NOT a player.
+ *  - "player": host plays on their own phone; there is no shared screen.
+ */
+export type HostMode = "tv" | "player";
+
 /** Idle time after which an un-started/abandoned room auto-expires. */
 export const ROOM_IDLE_EXPIRY_MS = 1000 * 60 * 60 * 3; // 3 hours
+/** A lobby nobody ever joins is swept this fast (host-only / empty rooms). */
+export const ROOM_EMPTY_LOBBY_EXPIRY_MS = 1000 * 60 * 30; // 30 minutes
 /** A finished room is auto-closed and swept after this grace period. */
 export const ROOM_ENDED_GRACE_MS = 1000 * 60 * 30; // 30 minutes
 /** A player is considered disconnected after missing heartbeats this long. */

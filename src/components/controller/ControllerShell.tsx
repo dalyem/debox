@@ -13,6 +13,7 @@ export function ControllerShell({
   statusLabel,
   turnLabel,
   error,
+  headerRight,
   children,
 }: {
   roomCode: string;
@@ -21,6 +22,7 @@ export function ControllerShell({
   statusLabel: string;
   turnLabel?: string;
   error?: string | null;
+  headerRight?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -35,9 +37,12 @@ export function ControllerShell({
             <div className="text-[0.7rem] text-haze">{turnLabel ?? statusLabel}</div>
           </div>
         </div>
-        <Badge variant="grape" className="font-mono tracking-[0.2em]">
-          {roomCode}
-        </Badge>
+        <div className="flex shrink-0 items-center gap-2">
+          {headerRight}
+          <Badge variant="grape" className="font-mono tracking-[0.2em]">
+            {roomCode}
+          </Badge>
+        </div>
       </header>
 
       <div className="relative flex min-h-0 flex-1 flex-col">

@@ -21,6 +21,22 @@ const LIVE_STATUSES: Doc<"rooms">["status"][] = [
   "paused",
 ];
 
+/** Expire a lobby that nobody ever joined (host-only / truly empty). */
+export const expireIfEmpty = internalMutation({
+  args: { roomId: v.id("rooms") },
+  handler: async (ctx, { roomId }) => {
+    const room = await ctx.db.get(roomId);
+    if (!room || (room.status !== "lobby" && room.status !== "pending")) return;
+    const players = await ctx.db
+      .query("players")
+      .withIndex("by_room", (q) => q.eq("roomId", roomId))
+      .first();
+    if (players) return; // someone joined — leave it on the normal idle clock
+    await ctx.db.patch(roomId, { status: "expired" });
+    await emit(ctx, roomId, "room_close", { reason: "empty" });
+  },
+});
+
 /** Expire a single room if it has been idle past its TTL. */
 export const expireIfIdle = internalMutation({
   args: { roomId: v.id("rooms") },

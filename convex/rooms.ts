@@ -10,12 +10,15 @@ import {
 } from "./lib/auth";
 import { allocateRoomCode, findRoomByCode } from "./lib/roomCodes";
 import { emit, getGameRow, launchGame, resumeRound } from "./lib/engine";
+import { generateGuestToken, hashGuestToken } from "./lib/guestTokens";
 import { getGame, getGameOrThrow } from "../src/lib/games";
 import {
+  ROOM_EMPTY_LOBBY_EXPIRY_MS,
   ROOM_ENDED_GRACE_MS,
   ROOM_IDLE_EXPIRY_MS,
   isRoomTerminal,
 } from "../src/lib/platform/types";
+import { pickAvatar } from "../src/lib/platform/avatars";
 
 /**
  * Room Engine — room creation, lifecycle and status.
@@ -43,6 +46,7 @@ function publicRoom(room: Doc<"rooms">) {
     roomCode: room.roomCode,
     status: room.status,
     gameType: room.gameType,
+    hostMode: room.hostMode ?? "tv",
     round: room.round ?? 0,
     maxPlayers: room.maxPlayers,
     minPlayers: room.minPlayers,
@@ -138,25 +142,44 @@ export const myRooms = query({
   },
 });
 
+/** Is the signed-in caller the host of this room? Gates host controls in the
+ *  player-mode controller. Returns false for guests. */
+export const amIHost = query({
+  args: { roomId: v.id("rooms") },
+  handler: async (ctx, { roomId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return false;
+    const room = await ctx.db.get(roomId);
+    return !!room && room.hostClerkId === identity.subject;
+  },
+});
+
 /* ------------------------------------------------------------- mutations */
 
 /** Create a room + lobby (host-auth). Returns code + share URL. */
 export const create = mutation({
-  args: { gameType: v.string(), settings: v.optional(v.any()) },
+  args: {
+    gameType: v.string(),
+    hostMode: v.optional(v.union(v.literal("tv"), v.literal("player"))),
+    settings: v.optional(v.any()),
+  },
   handler: async (ctx, args) => {
     const user = await getOrCreateUser(ctx);
     const engine = getGameOrThrow(args.gameType); // 400 if unknown game
     const code = await allocateRoomCode(ctx);
     const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const hostMode = args.hostMode ?? "tv";
+    const shareUrl = `${base}/join/${code}`;
     const now = Date.now();
 
     const roomId = await ctx.db.insert("rooms", {
       hostId: user._id,
       hostClerkId: user.clerkId,
       roomCode: code,
-      shareUrl: `${base}/join/${code}`,
+      shareUrl,
       gameType: args.gameType,
       status: "lobby",
+      hostMode,
       settings: args.settings,
       maxPlayers: engine.meta.maxPlayers,
       minPlayers: engine.meta.minPlayers,
@@ -167,12 +190,49 @@ export const create = mutation({
       lastActivityAt: now,
     });
 
-    // Precise auto-expiry if the lobby is abandoned (cron is the backstop).
+    // In "player" mode the host plays too — seat them as the first player.
+    let hostPlayer: {
+      playerId: Id<"players">;
+      guestToken: string;
+      seat: number;
+      displayName: string;
+      avatar: { color: string; emoji: string };
+    } | null = null;
+    if (hostMode === "player") {
+      const token = generateGuestToken();
+      const guestTokenHash = await hashGuestToken(token);
+      const salt = new Uint32Array(1);
+      crypto.getRandomValues(salt);
+      const avatar = pickAvatar(0, salt[0]!);
+      const displayName = (user.name ?? "Host").slice(0, 18);
+      const playerId = await ctx.db.insert("players", {
+        roomId,
+        displayName,
+        guestTokenHash,
+        avatarColor: avatar.color,
+        avatarEmoji: avatar.emoji,
+        seat: 0,
+        isActive: true,
+        isHost: true,
+        joinedAt: now,
+        lastSeenAt: now,
+      });
+      await emit(ctx, roomId, "player_join", { playerId, displayName, avatar, seat: 0 });
+      hostPlayer = { playerId, guestToken: token, seat: 0, displayName, avatar };
+    }
+
+    // Precise auto-expiry: 3h idle (cron backstop) + a 30-min sweep for lobbies
+    // nobody ever joins.
     await ctx.scheduler.runAfter(ROOM_IDLE_EXPIRY_MS, internal.sessions.expireIfIdle, {
       roomId,
     });
+    await ctx.scheduler.runAfter(
+      ROOM_EMPTY_LOBBY_EXPIRY_MS,
+      internal.sessions.expireIfEmpty,
+      { roomId },
+    );
 
-    return { roomId, roomCode: code, shareUrl: `${base}/join/${code}` };
+    return { roomId, roomCode: code, shareUrl, hostMode, hostPlayer };
   },
 });
 

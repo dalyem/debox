@@ -15,8 +15,10 @@ import { Hand } from "./Hand";
 import { MeldRow } from "./MeldRow";
 import { ObjectiveStrip } from "./ObjectiveStrip";
 import { LayDownBuilder } from "./LayDownBuilder";
+import { MobileTable } from "./MobileTable";
 import { Avatar } from "@/components/platform/Avatar";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface HitOption {
   targetPlayerId: string;
@@ -37,6 +39,7 @@ export function PhaseCardsController({
 }) {
   const you = view.you;
   const [mode, setMode] = useState<"play" | "laydown">("play");
+  const [tab, setTab] = useState<"play" | "table">("play");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hitOpen, setHitOpen] = useState(false);
   const [freezeOpen, setFreezeOpen] = useState(false);
@@ -118,6 +121,36 @@ export function PhaseCardsController({
   /* ---- PLAY MODE ---- */
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/* Hand / Table tabs — the Table is the same public view a TV would show */}
+      <div className="flex gap-1 px-3 pt-3">
+        {(["play", "table"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={cn(
+              "flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition",
+              tab === t ? "bg-white/15 text-cream" : "text-haze hover:bg-white/5",
+            )}
+          >
+            {t === "play" ? "Your hand" : "Table"}
+          </button>
+        ))}
+      </div>
+
+      {tab === "table" ? (
+        <div className="flex-1 overflow-y-auto">
+          <MobileTable
+            table={view.table}
+            discardTop={view.discardTop}
+            drawCount={view.drawCount}
+            currentPlayerId={view.currentPlayerId}
+            round={view.round}
+            youId={you.playerId}
+          />
+        </div>
+      ) : (
+        <>
       {/* Objective */}
       <div className="px-3 pt-3">
         <div className="surface flex flex-col gap-2 p-3">
@@ -206,6 +239,8 @@ export function PhaseCardsController({
           </div>
         )}
       </div>
+        </>
+      )}
 
       {/* Hit sheet */}
       <AnimatePresence>

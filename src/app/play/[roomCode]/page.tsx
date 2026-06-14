@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
-import { Pause } from "lucide-react";
+import { FastForward, LogOut, Pause, Play, Square } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useGuestSession } from "@/hooks/useGuestSession";
@@ -15,6 +15,7 @@ import type {
 } from "@/lib/games/phase-cards/types";
 import type { GameResult } from "@/lib/games/types";
 import { StageShell } from "@/components/platform/StageShell";
+import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { ControllerShell } from "@/components/controller/ControllerShell";
 import { ControllerLobby } from "@/components/controller/ControllerLobby";
@@ -55,8 +56,20 @@ export default function PlayPage() {
   ) as PrivateGameView | null | undefined;
 
   const submit = useMutation(api.gameplay.submitMove);
+
+  // Host-in-player-mode: this device may also be the authenticated host.
+  const amIHost =
+    useQuery(api.rooms.amIHost, roomId ? { roomId } : "skip") ?? false;
+  const startGame = useMutation(api.rooms.start);
+  const pauseGame = useMutation(api.rooms.pause);
+  const unpauseGame = useMutation(api.rooms.unpause);
+  const endGame = useMutation(api.rooms.end);
+  const closeRoom = useMutation(api.rooms.close);
+  const nextRound = useMutation(api.rooms.nextRound);
+
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   // No session for this code → go register a display name.
   useEffect(() => {
@@ -102,6 +115,53 @@ export default function PlayPage() {
         : ROOM_STATUS_LABELS[status]
       : ROOM_STATUS_LABELS[status];
 
+  const rid = roomId as Id<"rooms">;
+  const hostAct = async (fn: () => Promise<unknown>) => {
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setError(cleanError(e));
+      setTimeout(() => setError(null), 2800);
+    }
+  };
+  const onStart = async () => {
+    setStarting(true);
+    await hostAct(() => startGame({ roomId: rid }));
+    setStarting(false);
+  };
+  const onExit = async () => {
+    await hostAct(() => closeRoom({ roomId: rid }));
+    clear();
+    router.push("/dashboard/new");
+  };
+
+  const roundOver = priv?.status === "round_over";
+  const hostHeader =
+    amIHost && (status === "active" || status === "paused") ? (
+      <>
+        {roundOver ? (
+          <Button size="sm" variant="secondary" onClick={() => hostAct(() => nextRound({ roomId: rid }))}>
+            <FastForward className="size-4" />
+          </Button>
+        ) : status === "active" ? (
+          <Button size="sm" variant="secondary" onClick={() => hostAct(() => pauseGame({ roomId: rid }))}>
+            <Pause className="size-4" />
+          </Button>
+        ) : (
+          <Button size="sm" variant="lime" onClick={() => hostAct(() => unpauseGame({ roomId: rid }))}>
+            <Play className="size-4" />
+          </Button>
+        )}
+        <Button size="sm" variant="danger" onClick={() => hostAct(() => endGame({ roomId: rid }))}>
+          <Square className="size-4" />
+        </Button>
+        <Button size="sm" variant="outline" onClick={onExit} title="Close room & switch games">
+          <LogOut className="size-4" />
+        </Button>
+      </>
+    ) : null;
+
   return (
     <ControllerShell
       roomCode={roomCode}
@@ -110,6 +170,7 @@ export default function PlayPage() {
       statusLabel={ROOM_STATUS_LABELS[status]}
       turnLabel={turnLabel}
       error={error}
+      headerRight={hostHeader}
     >
       {status === "lobby" || status === "pending" ? (
         <ControllerLobby
@@ -117,6 +178,18 @@ export default function PlayPage() {
           avatar={me.avatar}
           players={roster}
           game={summary.game}
+          host={
+            amIHost
+              ? {
+                  roomCode,
+                  shareUrl: summary.shareUrl,
+                  minPlayers: summary.minPlayers,
+                  maxPlayers: summary.maxPlayers,
+                  starting,
+                  onStart,
+                }
+              : undefined
+          }
         />
       ) : null}
 
