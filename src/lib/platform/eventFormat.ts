@@ -73,8 +73,6 @@ export function formatEvent(
       return { emoji: "▶️", text: "Back in action", tone: "good" };
     case "game_replay":
       return { emoji: "🔁", text: "New game — same players!", tone: "good" };
-    case "lobby_reopen":
-      return { emoji: "🚪", text: "Back to the lobby — new players welcome", tone: "info" };
     default:
       return null;
   }

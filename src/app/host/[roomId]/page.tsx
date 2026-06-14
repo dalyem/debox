@@ -63,7 +63,7 @@ export default function HostRoomPage() {
   const close = useMutation(api.rooms.close);
   const nextRound = useMutation(api.rooms.nextRound);
   const playAgain = useMutation(api.rooms.playAgain);
-  const reopenLobby = useMutation(api.rooms.reopenLobby);
+  const startFreshSession = useMutation(api.rooms.startFreshSession);
 
   const [starting, setStarting] = useState(false);
   const [postGameBusy, setPostGameBusy] = useState<PostGameAction>(null);
@@ -85,10 +85,9 @@ export default function HostRoomPage() {
       onNewPlayers={async () => {
         setPostGameBusy("new");
         try {
-          await reopenLobby({ roomId });
+          const res = await startFreshSession({ roomId });
+          router.push(`/host/${res.roomId}`); // fresh code, same game + settings
         } catch {
-          // no-op; reopening the lobby has no precondition to fail on
-        } finally {
           setPostGameBusy(null);
         }
       }}

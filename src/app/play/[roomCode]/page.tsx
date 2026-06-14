@@ -9,6 +9,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useGuestSession } from "@/hooks/useGuestSession";
 import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { cleanError } from "@/lib/platform/errors";
+import { saveGuestSession } from "@/lib/platform/guestSession";
 import type {
   PhaseCardsMove,
   PrivateGameView,
@@ -77,7 +78,7 @@ export default function PlayPage() {
   const closeRoom = useMutation(api.rooms.close);
   const nextRound = useMutation(api.rooms.nextRound);
   const playAgainMut = useMutation(api.rooms.playAgain);
-  const reopenLobbyMut = useMutation(api.rooms.reopenLobby);
+  const startFreshSessionMut = useMutation(api.rooms.startFreshSession);
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -187,8 +188,28 @@ export default function PlayPage() {
         }}
         onNewPlayers={async () => {
           setPostGameBusy("new");
-          await hostAct(() => reopenLobbyMut({ roomId: rid }));
-          setPostGameBusy(null);
+          try {
+            const res = await startFreshSessionMut({ roomId: rid });
+            if (res.hostPlayer) {
+              // Re-seat the host in the fresh room, then drop into it. The old
+              // room's session stays keyed by its code and is simply abandoned.
+              saveGuestSession({
+                roomId: String(res.roomId),
+                roomCode: res.roomCode,
+                playerId: String(res.hostPlayer.playerId),
+                guestToken: res.hostPlayer.guestToken,
+                displayName: res.hostPlayer.displayName,
+                avatar: res.hostPlayer.avatar,
+              });
+              router.push(`/play/${res.roomCode}`);
+            } else {
+              router.push(`/host/${res.roomId}`);
+            }
+          } catch (e) {
+            setError(cleanError(e));
+            setTimeout(() => setError(null), 2800);
+            setPostGameBusy(null);
+          }
         }}
         onEnd={onExit}
       />

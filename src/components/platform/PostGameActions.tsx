@@ -48,7 +48,7 @@ export function PostGameActions({
         onClick={onNewPlayers}
       >
         <Users className="size-5" />
-        {busy === "new" ? "Reopening…" : "Play with new players"}
+        {busy === "new" ? "New room…" : "Play with new players"}
       </Button>
       <Button
         size="lg"

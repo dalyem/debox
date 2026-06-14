@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { QueryCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
   getCurrentUser,
   getOrCreateUser,
@@ -156,6 +156,89 @@ export const amIHost = query({
 
 /* ------------------------------------------------------------- mutations */
 
+type CreatedRoom = {
+  roomId: Id<"rooms">;
+  roomCode: string;
+  shareUrl: string;
+  hostMode: "tv" | "player";
+  hostPlayer: {
+    playerId: Id<"players">;
+    guestToken: string;
+    seat: number;
+    displayName: string;
+    avatar: { color: string; emoji: string };
+  } | null;
+};
+
+/** Core room+lobby creation, shared by `create` and `startFreshSession`. */
+async function createRoom(
+  ctx: MutationCtx,
+  user: Doc<"users">,
+  args: { gameType: string; hostMode: "tv" | "player"; settings?: unknown },
+): Promise<CreatedRoom> {
+  const engine = getGameOrThrow(args.gameType); // 400 if unknown game
+  const code = await allocateRoomCode(ctx);
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const shareUrl = `${base}/join/${code}`;
+  const now = Date.now();
+
+  const roomId = await ctx.db.insert("rooms", {
+    hostId: user._id,
+    hostClerkId: user.clerkId,
+    roomCode: code,
+    shareUrl,
+    gameType: args.gameType,
+    status: "lobby",
+    hostMode: args.hostMode,
+    settings: args.settings,
+    maxPlayers: engine.meta.maxPlayers,
+    minPlayers: engine.meta.minPlayers,
+    eventCursor: 0,
+    moveCursor: 0,
+    createdAt: now,
+    expiresAt: now + ROOM_IDLE_EXPIRY_MS,
+    lastActivityAt: now,
+  });
+
+  // In "player" mode the host plays too — seat them as the first player.
+  let hostPlayer: CreatedRoom["hostPlayer"] = null;
+  if (args.hostMode === "player") {
+    const token = generateGuestToken();
+    const guestTokenHash = await hashGuestToken(token);
+    const salt = new Uint32Array(1);
+    crypto.getRandomValues(salt);
+    const avatar = pickAvatar(0, salt[0]!);
+    const displayName = (user.name ?? "Host").slice(0, 18);
+    const playerId = await ctx.db.insert("players", {
+      roomId,
+      displayName,
+      guestTokenHash,
+      avatarColor: avatar.color,
+      avatarEmoji: avatar.emoji,
+      seat: 0,
+      isActive: true,
+      isHost: true,
+      joinedAt: now,
+      lastSeenAt: now,
+    });
+    await emit(ctx, roomId, "player_join", { playerId, displayName, avatar, seat: 0 });
+    hostPlayer = { playerId, guestToken: token, seat: 0, displayName, avatar };
+  }
+
+  // Precise auto-expiry: 3h idle (cron backstop) + a 30-min sweep for lobbies
+  // nobody ever joins.
+  await ctx.scheduler.runAfter(ROOM_IDLE_EXPIRY_MS, internal.sessions.expireIfIdle, {
+    roomId,
+  });
+  await ctx.scheduler.runAfter(
+    ROOM_EMPTY_LOBBY_EXPIRY_MS,
+    internal.sessions.expireIfEmpty,
+    { roomId },
+  );
+
+  return { roomId, roomCode: code, shareUrl, hostMode: args.hostMode, hostPlayer };
+}
+
 /** Create a room + lobby (host-auth). Returns code + share URL. */
 export const create = mutation({
   args: {
@@ -165,74 +248,11 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const user = await getOrCreateUser(ctx);
-    const engine = getGameOrThrow(args.gameType); // 400 if unknown game
-    const code = await allocateRoomCode(ctx);
-    const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-    const hostMode = args.hostMode ?? "tv";
-    const shareUrl = `${base}/join/${code}`;
-    const now = Date.now();
-
-    const roomId = await ctx.db.insert("rooms", {
-      hostId: user._id,
-      hostClerkId: user.clerkId,
-      roomCode: code,
-      shareUrl,
+    return createRoom(ctx, user, {
       gameType: args.gameType,
-      status: "lobby",
-      hostMode,
+      hostMode: args.hostMode ?? "tv",
       settings: args.settings,
-      maxPlayers: engine.meta.maxPlayers,
-      minPlayers: engine.meta.minPlayers,
-      eventCursor: 0,
-      moveCursor: 0,
-      createdAt: now,
-      expiresAt: now + ROOM_IDLE_EXPIRY_MS,
-      lastActivityAt: now,
     });
-
-    // In "player" mode the host plays too — seat them as the first player.
-    let hostPlayer: {
-      playerId: Id<"players">;
-      guestToken: string;
-      seat: number;
-      displayName: string;
-      avatar: { color: string; emoji: string };
-    } | null = null;
-    if (hostMode === "player") {
-      const token = generateGuestToken();
-      const guestTokenHash = await hashGuestToken(token);
-      const salt = new Uint32Array(1);
-      crypto.getRandomValues(salt);
-      const avatar = pickAvatar(0, salt[0]!);
-      const displayName = (user.name ?? "Host").slice(0, 18);
-      const playerId = await ctx.db.insert("players", {
-        roomId,
-        displayName,
-        guestTokenHash,
-        avatarColor: avatar.color,
-        avatarEmoji: avatar.emoji,
-        seat: 0,
-        isActive: true,
-        isHost: true,
-        joinedAt: now,
-        lastSeenAt: now,
-      });
-      await emit(ctx, roomId, "player_join", { playerId, displayName, avatar, seat: 0 });
-      hostPlayer = { playerId, guestToken: token, seat: 0, displayName, avatar };
-    }
-
-    // Precise auto-expiry: 3h idle (cron backstop) + a 30-min sweep for lobbies
-    // nobody ever joins.
-    await ctx.scheduler.runAfter(ROOM_IDLE_EXPIRY_MS, internal.sessions.expireIfIdle, {
-      roomId,
-    });
-    await ctx.scheduler.runAfter(
-      ROOM_EMPTY_LOBBY_EXPIRY_MS,
-      internal.sessions.expireIfEmpty,
-      { roomId },
-    );
-
-    return { roomId, roomCode: code, shareUrl, hostMode, hostPlayer };
   },
 });
 
@@ -332,31 +352,29 @@ export const playAgain = mutation({
 });
 
 /**
- * Reopen the lobby for a NEW group (ended → lobby) — keeps the room and its
- * code so people can join or leave, then the host starts again. The finished
- * game's state and standings are cleared.
+ * Start a brand-new session for a NEW group — closes the finished room and
+ * spins up a fresh one (new code) with the SAME game, host mode and settings.
+ * Everyone simply joins the new code; no lobby-leave dance required. Returns
+ * the new room (and the host's player session in "player" mode) so the client
+ * can navigate straight into it.
  */
-export const reopenLobby = mutation({
+export const startFreshSession = mutation({
   args: { roomId: v.id("rooms") },
   handler: async (ctx, { roomId }) => {
-    const room = await requireHostRoom(ctx, roomId);
-    if (room.status !== "ended") {
-      throw new Error("You can only do this after a game ends");
+    const old = await requireHostRoom(ctx, roomId);
+    const user = await getOrCreateUser(ctx);
+
+    // Retire the finished room so it doesn't linger.
+    if (!isRoomTerminal(old.status)) {
+      await emit(ctx, roomId, "room_close", {}, "all");
+      await ctx.db.patch(roomId, { status: "closed", closedAt: Date.now() });
     }
-    const row = await getGameRow(ctx, roomId);
-    if (row) await ctx.db.delete(row._id);
-    const now = Date.now();
-    await ctx.db.patch(roomId, {
-      status: "lobby",
-      result: undefined,
-      round: undefined,
-      startedAt: undefined,
-      endedAt: undefined,
-      lastActivityAt: now,
-      expiresAt: now + ROOM_IDLE_EXPIRY_MS,
+
+    return createRoom(ctx, user, {
+      gameType: old.gameType,
+      hostMode: old.hostMode ?? "tv",
+      settings: old.settings,
     });
-    await emit(ctx, roomId, "lobby_reopen", {}, "all");
-    return { ok: true };
   },
 });
 
