@@ -44,11 +44,22 @@ export const viewport: Viewport = {
   userScalable: false,
 };
 
+/**
+ * A valid-format placeholder publishable key so `next build` can prerender the
+ * public pages (landing, /_not-found, join/play) even when the Clerk key is
+ * absent — e.g. a preview deploy without env vars. The real key is required at
+ * runtime for host auth. Mirrors the Convex URL fallback in
+ * `ConvexClientProvider`; when the env var is set this is never used.
+ */
+const CLERK_PUBLISHABLE_KEY =
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k";
+
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <ClerkProvider
+      publishableKey={CLERK_PUBLISHABLE_KEY}
       appearance={{
         variables: {
           colorPrimary: "#8b5cf6",
