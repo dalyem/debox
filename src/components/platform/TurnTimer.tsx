@@ -12,16 +12,11 @@ function fmt(s: number): string {
 }
 
 /**
- * Countdown to the current turn's auto-resolve deadline. Small chip in the
- * header for everyone; a big center pulse for the active player under 15s.
+ * Game-agnostic countdown to the current turn's auto-resolve deadline. Small
+ * chip in the header for everyone; a big center pulse for the active player
+ * under 15s. Reads the deadline (ms epoch) any game exposes on its private view.
  */
-export function TurnTimer({
-  deadline,
-  active,
-}: {
-  deadline: number;
-  active: boolean;
-}) {
+export function TurnTimer({ deadline, active }: { deadline: number; active: boolean }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 500);

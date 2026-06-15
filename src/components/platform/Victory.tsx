@@ -5,41 +5,45 @@ import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
 import { Crown } from "lucide-react";
 import type { GameResult } from "@/lib/games/types";
-import type { PublicPlayerView } from "@/lib/games/phase-cards/types";
 import { Avatar } from "@/components/platform/Avatar";
 import { paletteOf } from "@/lib/design/palette";
 import { cn } from "@/lib/utils";
+
+/** Minimal player shape the winner screen needs — game-agnostic. */
+interface VictoryPlayer {
+  playerId: string;
+  displayName: string;
+  avatar: { color: string; emoji: string };
+}
 
 function fireConfetti() {
   const end = Date.now() + 1400;
   const colors = ["#a78bfa", "#22d3ee", "#f472b6", "#fbbf24", "#a3e635"];
   (function frame() {
-    confetti({
-      particleCount: 4,
-      angle: 60,
-      spread: 70,
-      origin: { x: 0 },
-      colors,
-    });
-    confetti({
-      particleCount: 4,
-      angle: 120,
-      spread: 70,
-      origin: { x: 1 },
-      colors,
-    });
+    confetti({ particleCount: 4, angle: 60, spread: 70, origin: { x: 0 }, colors });
+    confetti({ particleCount: 4, angle: 120, spread: 70, origin: { x: 1 }, colors });
     if (Date.now() < end) requestAnimationFrame(frame);
   })();
 }
 
+/**
+ * The shared full-screen winner celebration for the TV. Works for any game: it
+ * reads only the game-agnostic `GameResult` (winners + standings) plus a roster
+ * for avatars/names. A game may pass a custom `winnerLabel`/`subtitle` to frame
+ * the result (e.g. "Team A wins").
+ */
 export function Victory({
   result,
   players,
   actions,
+  winnerLabel,
+  subtitle,
 }: {
   result: GameResult;
-  players: PublicPlayerView[];
+  players: VictoryPlayer[];
   actions?: ReactNode;
+  winnerLabel?: string;
+  subtitle?: string;
 }) {
   const byId = new Map(players.map((p) => [p.playerId, p]));
 
@@ -60,9 +64,7 @@ export function Victory({
         transition={{ type: "spring", stiffness: 220, damping: 16 }}
         className="text-center"
       >
-        <div className="font-display text-xl uppercase tracking-[0.4em] text-gold">
-          Winner
-        </div>
+        <div className="font-display text-xl uppercase tracking-[0.4em] text-gold">Winner</div>
         <motion.div
           animate={{ y: [0, -10, 0] }}
           transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
@@ -76,13 +78,12 @@ export function Victory({
             className="!size-36 !text-7xl"
           />
         </motion.div>
-        <h1
-          className="mt-5 font-display text-6xl font-bold"
-          style={{ color: winnerSwatch.bright }}
-        >
-          {winner?.displayName ?? "Champion"}
+        <h1 className="mt-5 font-display text-6xl font-bold" style={{ color: winnerSwatch.bright }}>
+          {winnerLabel ?? winner?.displayName ?? "Champion"}
         </h1>
-        {result.winners.length > 1 ? (
+        {subtitle ? (
+          <p className="mt-2 text-haze">{subtitle}</p>
+        ) : result.winners.length > 1 ? (
           <p className="mt-2 text-haze">
             Tied with{" "}
             {result.winners
@@ -118,18 +119,10 @@ export function Victory({
                 <span className="w-6 text-center font-display text-lg font-bold tabular-nums text-haze">
                   {s.rank}
                 </span>
-                <Avatar
-                  color={p?.avatar.color ?? "slate"}
-                  emoji={p?.avatar.emoji ?? "🙂"}
-                  size="sm"
-                />
-                <span className="flex-1 font-semibold">
-                  {p?.displayName ?? "Player"}
-                </span>
+                <Avatar color={p?.avatar.color ?? "slate"} emoji={p?.avatar.emoji ?? "🙂"} size="sm" />
+                <span className="flex-1 font-semibold">{p?.displayName ?? "Player"}</span>
                 <span className="text-sm text-haze">{s.detail}</span>
-                <span className="font-display text-lg font-bold tabular-nums">
-                  {s.score}
-                </span>
+                <span className="font-display text-lg font-bold tabular-nums">{s.score}</span>
               </div>
             );
           })}

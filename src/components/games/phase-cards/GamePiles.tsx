@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { motion } from "framer-motion";
 import type { Card } from "@/lib/cards";
 import { PlayingCard } from "./PlayingCard";
@@ -19,6 +20,7 @@ export function GamePiles({
   onDrawDeck,
   onTakeDiscard,
   onDiscardCard,
+  rightSlot,
 }: {
   drawCount: number;
   discardTop: Card | null;
@@ -28,6 +30,8 @@ export function GamePiles({
   onDrawDeck: () => void;
   onTakeDiscard: () => void;
   onDiscardCard: (card: Card) => void;
+  /** Optional action shown to the right of the stacks (e.g. the Build button). */
+  rightSlot?: ReactNode;
 }) {
   const { dropProps, active } = useDropZone(
     () => canDiscard,
@@ -40,7 +44,7 @@ export function GamePiles({
   const bobLoop = { repeat: Infinity, duration: 1.6 } as const;
 
   return (
-    <div className="flex items-end justify-center gap-12 py-1">
+    <div className="flex items-end justify-center gap-8 py-1">
       {/* Draw pile — bobs when it's your turn to draw; count shown as a badge. */}
       <button
         type="button"
@@ -101,6 +105,10 @@ export function GamePiles({
           )}
         </motion.button>
       </motion.div>
+
+      {/* Action beside the stacks (Build / "Down ✓") — kept with the other
+          interactive game pieces rather than up in the objective bubble. */}
+      {rightSlot ? <div className="self-center">{rightSlot}</div> : null}
     </div>
   );
 }

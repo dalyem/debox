@@ -3,11 +3,13 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import { authenticatePlayer } from "./lib/guestTokens";
 import {
   applyPlayerMove,
+  emit,
   privateView,
   publicView,
   resumeRound,
   runTurnTimeout,
 } from "./lib/engine";
+import { REACTION_EMOJIS } from "../src/lib/platform/types";
 
 /**
  * Gameplay — the player-facing move pipeline and audience-safe projections.
@@ -25,6 +27,38 @@ export const submitMove = mutation({
     if (!room) throw new Error("NOT_FOUND: room");
     const player = await authenticatePlayer(ctx, roomId, guestToken);
     await applyPlayerMove(ctx, room, player, move);
+    return { ok: true };
+  },
+});
+
+/**
+ * Fling a quick emoji reaction onto the shared screen (player-auth). Reactions
+ * are ephemeral: they ride the normal event feed and are animated as transient
+ * floaters, never stored as game state.
+ */
+export const sendReaction = mutation({
+  args: {
+    roomId: v.id("rooms"),
+    guestToken: v.string(),
+    emoji: v.string(),
+  },
+  handler: async (ctx, { roomId, guestToken, emoji }) => {
+    if (!(REACTION_EMOJIS as readonly string[]).includes(emoji)) {
+      throw new Error("INVALID: unknown reaction");
+    }
+    const room = await ctx.db.get(roomId);
+    if (!room) throw new Error("NOT_FOUND: room");
+    if (!["active", "paused", "ended"].includes(room.status)) {
+      throw new Error("LOCKED: reactions aren't open right now");
+    }
+    const player = await authenticatePlayer(ctx, roomId, guestToken);
+    await emit(
+      ctx,
+      roomId,
+      "reaction",
+      { playerId: player._id, displayName: player.displayName, emoji },
+      "all",
+    );
     return { ok: true };
   },
 });

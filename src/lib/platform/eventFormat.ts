@@ -1,5 +1,6 @@
 import { describeCard } from "@/lib/design/cards";
 import type { Card } from "@/lib/cards";
+import { rankPlural, type Rank } from "@/lib/cards/standard";
 
 /**
  * Turn a raw event row into a friendly, animatable notification. Returns null
@@ -73,6 +74,45 @@ export function formatEvent(
       return { emoji: "▶️", text: "Back in action", tone: "good" };
     case "game_replay":
       return { emoji: "🔁", text: "New game — same players!", tone: "good" };
+
+    /* ---- Spades ---- */
+    case "spades_bid": {
+      const label = p.nil ? "bid nil" : `bid ${p.bid}`;
+      return { emoji: p.nil ? "🥶" : "🗣️", text: `${pid("playerId")} ${label}`, tone: "info" };
+    }
+    case "spades_broken":
+      return { emoji: "💥", text: "Spades broken!", tone: "warn" };
+
+    /* ---- Cheat ---- */
+    case "cheat_play": {
+      const rank = rankPlural(p.claimedRank as Rank);
+      const n = Number(p.count ?? 0);
+      return {
+        emoji: "🃏",
+        text: `${pid("playerId")} claims ${n} ${n === 1 ? rank.replace(/s$/, "") : rank}`,
+        tone: "info",
+      };
+    }
+    case "cheat_challenge": {
+      const ch = (p.challenge ?? {}) as {
+        challengerId: string;
+        accusedId: string;
+        wasBluff: boolean;
+        loserId: string;
+      };
+      return ch.wasBluff
+        ? {
+            emoji: "🔥",
+            text: `${nameOf(ch.accusedId)} was lying — eats the pile!`,
+            tone: "big",
+          }
+        : {
+            emoji: "🛡️",
+            text: `${nameOf(ch.accusedId)} was honest — ${nameOf(ch.challengerId)} takes it`,
+            tone: "big",
+          };
+    }
+
     default:
       return null;
   }
