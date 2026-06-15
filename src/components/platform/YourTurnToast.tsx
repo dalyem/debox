@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
-/** Pops a banner the moment it becomes the player's turn. */
+/** Pops a banner the moment it becomes the player's turn. Game-agnostic. */
 export function YourTurnToast({ active }: { active: boolean }) {
   const [show, setShow] = useState(false);
   const prev = useRef(active);

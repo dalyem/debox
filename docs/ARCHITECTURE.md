@@ -1,8 +1,8 @@
 # Debox Architecture
 
-Debox is a **platform** that hosts many games, plus one shipped game (Phase
-Cards). This document explains how the platform is layered so that a new game is
-a *module*, not a rewrite.
+Debox is a **platform** that hosts many games, plus three shipped games (Phase
+Cards, Spades, and Cheat/Bullshit). This document explains how the platform is
+layered so that a new game is a *module*, not a rewrite.
 
 - [System overview](#system-overview)
 - [Folder structure](#folder-structure)
@@ -12,7 +12,7 @@ a *module*, not a rewrite.
 - [Realtime model](#realtime-model)
 - [Security model](#security-model)
 - [Session lifecycle](#session-lifecycle)
-- [The card engine & Phase Cards](#the-card-engine--phase-cards)
+- [The card engine & shipped games](#the-card-engine--shipped-games)
 - [Design system](#design-system)
 - [Scalability](#scalability)
 
@@ -94,11 +94,14 @@ debox/
 │   │   ├── platform/              # Avatar, QR, StageShell, EventToaster, RoomCard…
 │   │   ├── tv/                    # TV chrome (lobby)
 │   │   ├── controller/            # Controller chrome (shell, lobby, results)
-│   │   └── games/phase-cards/     # Phase Cards TV + controller views
+│   │   └── games/                 # registry.ts + per-game TV/controller views
+│   │       ├── shared/            # StandardCardFace, reactions (layer + bar/fab)
+│   │       ├── phase-cards/  spades/  cheat/
 │   ├── lib/
 │   │   ├── platform/              # rng, turn engine, types, avatars, guest session, events
-│   │   ├── cards/                 # ★ Reusable Card Engine (deck/shuffle/deal/validate)
-│   │   ├── games/                 # GameEngine contract, registry, phase-cards/*
+│   │   ├── cards/                 # ★ Card Engine: colored deck + standard 52-card deck
+│   │   ├── games/                 # GameEngine contract + registry
+│   │   │   ├── phase-cards/  spades/  cheat/   # pure engines + tests
 │   │   └── design/                # palette + card styling tokens
 │   ├── hooks/                     # useGuestSession, useHeartbeat
 │   └── providers/                 # Convex + Clerk provider
@@ -161,8 +164,20 @@ Games register themselves with the **registry** (`src/lib/games/registry.ts`):
 ```ts
 // src/lib/games/index.ts — imported by both server and browser
 registerGame(PhaseCardsEngine);
+registerGame(SpadesEngine);
+registerGame(CheatEngine);
 // registerGame(TriviaEngine);   ← future
 ```
+
+The **client** mirrors this with a parallel view registry
+(`src/components/games/registry.ts`) mapping a `gameType` → `{ Tv, Controller }`
+React components. The host (`/host/[roomId]`) and controller
+(`/play/[roomCode]`) pages are fully game-agnostic: they own the platform chrome
+(lobby, header, results, reactions, post-game choices) and delegate the *active
+board* to the registered views, keyed by the room's `gameType`. Every game's
+projections expose a small shared base (`status` / `isYourTurn` / `turnDeadline`)
+so the pages can drive the turn timer, "your turn" banner and round pacing
+without knowing the game.
 
 Because the registry is the single source of truth:
 
@@ -269,24 +284,51 @@ pending → lobby → active ⇄ paused → ended → closed
 
 ---
 
-## The card engine & Phase Cards
+## The card engine & shipped games
 
-**Card Engine** (`src/lib/cards/`) is a reusable, game-agnostic framework:
-`createDeck`, `shuffleDeck`, `dealCards`, `drawCard`, `discardCard`,
-`recycleDiscard`, and validators `validateSet` / `validateRun` /
-`validateColorGroup` with full wild ("Shift") and skip ("Freeze") handling.
-Shuffles take an injected seeded RNG (`src/lib/platform/rng.ts`) so deals are
-deterministic and replayable. The canonical Debox deck is 108 cards (1–12 in
-four colors ×2, 8 Shifts, 4 Freezes).
+**Card Engine** (`src/lib/cards/`) is a reusable, game-agnostic framework with
+two decks:
 
-**Phase Cards** (`src/lib/games/phase-cards/`) is the first game — an original
-ten-phase climb. The phase ladder (`phases.ts`) is mechanically equivalent to the
-genre's classic progression (two sets of 3 → … → a set of 5 + a set of 3) with
-original names and copy. The engine (`engine.ts`) implements draw/lay-down/hit/
-freeze/discard, round scoring (1–9 = 5, 10–12 = 10, Freeze = 15, Shift = 25),
-phase advancement, and win detection. It is covered by unit tests for the card
-validators, phase validation, turn flow, freeze/skip, scoring and information
-hiding.
+- The **colored Debox deck** (`types.ts`, `deck.ts`, `validate.ts`): `createDeck`,
+  `shuffleDeck`, `dealCards`, `drawCard`, `discardCard`, `recycleDiscard`, and
+  validators `validateSet` / `validateRun` / `validateColorGroup` with full wild
+  ("Shift") and skip ("Freeze") handling. 108 cards (1–12 in four colors ×2, 8
+  Shifts, 4 Freezes). Backs **Phase Cards**.
+- The **standard 52-card deck** (`standard.ts`): `Suit`/`Rank`/`StandardCard`,
+  `createStandardDeck`, `shuffleStandard`, `dealHands` (fixed count) / `dealAll`
+  (even split), `compareRank`, `compareSuit`, `sortStandardHand`, plus labels and
+  the Cheat rank cycle. Backs **Spades** and **Cheat**.
+
+Both decks shuffle through the same injected seeded RNG (`src/lib/platform/rng.ts`)
+so deals are deterministic and replayable.
+
+**Phase Cards** (`src/lib/games/phase-cards/`) — an original ten-phase climb (see
+`phases.ts`); draw/lay-down/hit/freeze/discard with round scoring and win
+detection.
+
+**Spades** (`src/lib/games/spades/`) — partnership trick-taking for exactly four
+(seats 0&2 vs 1&3). Bidding → 13 tricks (follow suit, spades trump, can't lead
+spades until broken) → team scoring with bags + nil (pure, in `scoring.ts`).
+First team to 500 wins. `round_over` between hands uses the platform's `resume`
+pacing; stalled turns auto-bid/auto-play via `autoResolveTurn`.
+
+**Cheat / Bullshit** (`src/lib/games/cheat/`) — 3–8 players. The whole deck is
+dealt; the required rank advances each turn (A→2→…→K→loop). Players play cards
+face-down with an auto-claim of the required rank (and may lie); anyone may call
+"Cheat!". A challenge reveals the cards — the liar or the wrong challenger eats
+the pile. First to empty their hand wins (a win only locks in once the final play
+can no longer be challenged).
+
+Every engine is covered by pure unit tests for rules, scoring, turn flow and
+information hiding (`*.test.ts`).
+
+### Quick reactions
+
+Players can fling emoji (😂 😮 👀 🤔 💀) at the shared screen. This rides the
+existing **event feed** — no schema change: `gameplay.sendReaction` (player-auth)
+emits a `reaction` event, the host's `ReactionsLayer` animates it as a brief
+floater, and the controller's `ReactionFab` sends it. The toaster ignores
+reactions so they never clutter the notification stream.
 
 ---
 

@@ -275,10 +275,11 @@ export function PhaseCardsController({
           ) : (
             <>
               {/* Table (scrolls) */}
-              <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-3">
-                {/* Your objective — phase name + objectives side by side */}
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-3">
+                {/* Your objective — phase name + objectives. Kept minimal; the
+                    Build action lives down with the piles. */}
                 <div className="surface mb-3 flex items-center gap-3 p-2.5">
-                  <div className="min-w-0 shrink-0 max-w-[40%]">
+                  <div className="min-w-0 shrink-0 max-w-[42%]">
                     <div className="text-[0.6rem] uppercase tracking-[0.2em] text-haze">
                       {you.finishedLadder ? "Status" : `Phase ${you.phaseIndex}`}
                     </div>
@@ -286,24 +287,11 @@ export function PhaseCardsController({
                       {you.phaseName}
                     </div>
                   </div>
-                  {!you.completedPhase ? (
-                    <ObjectiveStrip
-                      requirements={you.requirements}
-                      size="sm"
-                      className="min-w-0 flex-1 justify-end"
-                    />
-                  ) : (
-                    <div className="flex-1" />
-                  )}
-                  {a.canLayDown ? (
-                    <Button size="sm" variant="lime" className="shrink-0" onClick={() => setMode("laydown")}>
-                      <Layers className="size-4" /> Build
-                    </Button>
-                  ) : you.completedPhase ? (
-                    <span className="chip shrink-0 border-lime/40 bg-lime/15 text-lime">
-                      Down ✓
-                    </span>
-                  ) : null}
+                  <ObjectiveStrip
+                    requirements={you.requirements}
+                    size="sm"
+                    className="min-w-0 flex-1 justify-end"
+                  />
                 </div>
 
                 {/* Everyone's melds (drop a card on a meld to add to it) */}
@@ -339,12 +327,23 @@ export function PhaseCardsController({
                   onDrawDeck={() => move({ type: "draw", source: "draw" })}
                   onTakeDiscard={() => move({ type: "draw", source: "discard" })}
                   onDiscardCard={discardCard}
+                  rightSlot={
+                    a.canLayDown ? (
+                      <Button size="sm" variant="lime" onClick={() => setMode("laydown")}>
+                        <Layers className="size-4" /> Build
+                      </Button>
+                    ) : you.completedPhase ? (
+                      <span className="chip border-lime/40 bg-lime/15 text-lime">Down ✓</span>
+                    ) : null
+                  }
                 />
               </div>
 
-              {/* Fanned, draggable hand */}
-              <div className="bg-ink-2/90 px-2 pb-2 pt-1 backdrop-blur">
-                <div ref={handRef} className="flex items-end justify-center">
+              {/* Fanned, draggable hand. `touch-none` on the whole strip so a
+                  touch that lands in the gaps between overlapping cards drags
+                  instead of scrolling the screen. */}
+              <div className="touch-none bg-ink-2/90 px-2 pb-2 pt-1 backdrop-blur">
+                <div ref={handRef} className="flex touch-none items-end justify-center">
                   {orderedCards.map((card, i) => (
                     <DragCard
                       key={card.id}

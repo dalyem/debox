@@ -10,10 +10,6 @@ import { useGuestSession } from "@/hooks/useGuestSession";
 import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { cleanError } from "@/lib/platform/errors";
 import { saveGuestSession } from "@/lib/platform/guestSession";
-import type {
-  PhaseCardsMove,
-  PrivateGameView,
-} from "@/lib/games/phase-cards/types";
 import type { GameResult } from "@/lib/games/types";
 import { StageShell } from "@/components/platform/StageShell";
 import { Button } from "@/components/ui/button";
@@ -21,13 +17,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { ControllerShell } from "@/components/controller/ControllerShell";
 import { ControllerLobby } from "@/components/controller/ControllerLobby";
 import { ControllerResults } from "@/components/controller/ControllerResults";
-import { PhaseCardsController } from "@/components/games/phase-cards/PhaseCardsController";
-import { Leaderboard } from "@/components/games/phase-cards/Leaderboard";
-import { FreezeFlash } from "@/components/games/phase-cards/FreezeFlash";
-import { TurnTimer } from "@/components/games/phase-cards/TurnTimer";
-import { YourTurnToast } from "@/components/games/phase-cards/YourTurnToast";
-import { AnchorProvider } from "@/components/games/phase-cards/anchors";
-import { CardFlights } from "@/components/games/phase-cards/CardFlights";
+import { TurnTimer } from "@/components/platform/TurnTimer";
+import { YourTurnToast } from "@/components/platform/YourTurnToast";
+import { getGameViews, type PrivateBaseView, type RosterPlayer } from "@/components/games/registry";
+import { ReactionFab } from "@/components/games/shared/ReactionFab";
 import {
   PostGameActions,
   type PostGameAction,
@@ -64,9 +57,10 @@ export default function PlayPage() {
   const priv = useQuery(
     api.gameplay.privateState,
     roomId && guestToken ? { roomId, guestToken } : "skip",
-  ) as PrivateGameView | null | undefined;
+  ) as (PrivateBaseView & Record<string, unknown>) | null | undefined;
 
   const submit = useMutation(api.gameplay.submitMove);
+  const sendReaction = useMutation(api.gameplay.sendReaction);
 
   // Host-in-player-mode: this device may also be the authenticated host.
   const amIHost =
@@ -105,10 +99,11 @@ export default function PlayPage() {
     return <FullScreenSpinner label="Taking you back…" />;
 
   const status = summary.status as RoomStatus;
-  const roster = players ?? [];
+  const roster = (players ?? []) as RosterPlayer[];
   const result = (summary.result as GameResult | null) ?? null;
+  const views = summary.game ? getGameViews(summary.game.id) : null;
 
-  const onMove = async (m: PhaseCardsMove) => {
+  const onMove = async (m: unknown) => {
     if (!roomId || !guestToken) return;
     setSubmitting(true);
     setError(null);
@@ -120,6 +115,11 @@ export default function PlayPage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const react = (emoji: string) => {
+    if (!roomId || !guestToken) return;
+    void sendReaction({ roomId, guestToken, emoji }).catch(() => {});
   };
 
   const turnLabel =
@@ -191,8 +191,6 @@ export default function PlayPage() {
           try {
             const res = await startFreshSessionMut({ roomId: rid });
             if (res.hostPlayer) {
-              // Re-seat the host in the fresh room, then drop into it. The old
-              // room's session stays keyed by its code and is simply abandoned.
               saveGuestSession({
                 roomId: String(res.roomId),
                 roomCode: res.roomCode,
@@ -216,9 +214,9 @@ export default function PlayPage() {
     ) : null;
 
   const gameLive = status === "active" && !!priv && priv.status === "in_progress";
+  const reactionsOpen = status === "active" || status === "paused" || status === "ended";
 
   return (
-    <AnchorProvider>
     <ControllerShell
       roomCode={roomCode}
       displayName={me.displayName}
@@ -269,33 +267,21 @@ export default function PlayPage() {
           <div className="flex flex-1 items-center justify-center gap-2 text-haze">
             <Spinner /> Dealing…
           </div>
-        ) : priv === null ? (
+        ) : priv === null || !views ? (
           <div className="flex flex-1 items-center justify-center text-haze">
             Waiting for the game to start…
           </div>
-        ) : priv.status === "round_over" || priv.status === "game_over" ? (
-          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
-            <div className="text-center">
-              <div className="text-3xl">🧮</div>
-              <div className="font-display text-2xl font-bold">Round complete!</div>
-              <p className="text-sm text-haze">
-                Where everyone stands — next round dealing…
-              </p>
-            </div>
-            <Leaderboard players={priv.table} youId={String(me.playerId)} animate />
-          </div>
         ) : (
-          <PhaseCardsController
+          <views.Controller
+            roomId={String(rid)}
+            roomCode={roomCode}
             view={priv}
+            me={me as RosterPlayer}
+            players={roster}
             onMove={onMove}
             submitting={submitting}
-            storageKey={`debox.hand.${roomCode}`}
           />
         )
-      ) : null}
-
-      {status === "active" && priv && priv.status === "in_progress" ? (
-        <FreezeFlash roomId={String(rid)} playerId={String(me.playerId)} />
       ) : null}
 
       {status === "ended" ? (
@@ -324,10 +310,8 @@ export default function PlayPage() {
           </div>
         )
       ) : null}
+
+      {reactionsOpen ? <ReactionFab onReact={react} /> : null}
     </ControllerShell>
-      {gameLive ? (
-        <CardFlights roomId={String(rid)} perspectiveId={String(me.playerId)} />
-      ) : null}
-    </AnchorProvider>
   );
 }

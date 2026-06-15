@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Pause,
   Play,
@@ -15,10 +15,10 @@ import {
 } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import type { PublicGameView } from "@/lib/games/phase-cards/types";
 import type { GameResult } from "@/lib/games/types";
 import { StageShell } from "@/components/platform/StageShell";
 import { EventToaster } from "@/components/platform/EventToaster";
+import { Victory } from "@/components/platform/Victory";
 import { Wordmark } from "@/components/brand/Logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,11 +34,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { TvLobby } from "@/components/tv/TvLobby";
-import { PhaseCardsTV } from "@/components/games/phase-cards/PhaseCardsTV";
-import { AnchorProvider } from "@/components/games/phase-cards/anchors";
-import { CardFlights } from "@/components/games/phase-cards/CardFlights";
-import { RoundSummary } from "@/components/games/phase-cards/RoundSummary";
-import { Victory } from "@/components/games/phase-cards/Victory";
+import { getGameViews, type PublicBaseView } from "@/components/games/registry";
+import { ReactionsLayer } from "@/components/games/shared/ReactionsLayer";
 import {
   PostGameActions,
   type PostGameAction,
@@ -52,7 +49,7 @@ export default function HostRoomPage() {
 
   const data = useQuery(api.rooms.hostRoom, { roomId });
   const publicState = useQuery(api.gameplay.publicState, { roomId }) as
-    | PublicGameView
+    | (PublicBaseView & Record<string, unknown>)
     | null
     | undefined;
 
@@ -116,18 +113,19 @@ export default function HostRoomPage() {
 
   const status = data.room.status as RoomStatus;
   const game = data.game;
+  const views = game ? getGameViews(game.id) : null;
   const view = publicState ?? null;
   const roundOver = view?.status === "round_over";
   const result = (data.room.result as GameResult | null) ?? null;
   const isTerminal = status === "ended" || status === "closed" || status === "expired";
   const showResults = !!result && (isTerminal || view?.status === "game_over");
+  const inGame = status === "active" || status === "paused";
+  const reactionsOpen = inGame || status === "ended";
 
   return (
-    <AnchorProvider>
     <StageShell>
-      {(status === "active" || status === "paused") && view ? (
-        <CardFlights roomId={roomId} perspectiveId={null} />
-      ) : null}
+      {reactionsOpen ? <ReactionsLayer roomId={String(roomId)} /> : null}
+
       {/* Header */}
       <header className="flex items-center justify-between gap-4 px-6 py-4">
         <div className="flex items-center gap-4">
@@ -148,7 +146,7 @@ export default function HostRoomPage() {
           {!isTerminal ? (
             <ExitButton
               playerCount={data.players.length}
-              inGame={status === "active" || status === "paused"}
+              inGame={inGame}
               onConfirm={async () => {
                 await close({ roomId });
                 router.push("/dashboard/new");
@@ -156,7 +154,7 @@ export default function HostRoomPage() {
             />
           ) : null}
 
-          {(status === "active" || status === "paused") && (
+          {inGame && (
             <>
               {roundOver ? (
                 <Button size="sm" variant="secondary" onClick={() => nextRound({ roomId })}>
@@ -175,8 +173,6 @@ export default function HostRoomPage() {
             </>
           )}
 
-          {/* When a game is over the choices live in the on-screen action bar
-              (play again / new players / end). Once truly closed, just exit. */}
           {status === "closed" || status === "expired" ? (
             <Button size="sm" variant="primary" asChild>
               <Link href="/dashboard">
@@ -189,7 +185,7 @@ export default function HostRoomPage() {
 
       {/* Event notifications */}
       <div className="pointer-events-none absolute left-1/2 top-20 z-40 -translate-x-1/2">
-        <EventToaster roomId={roomId} nameOf={nameOf} audience="tv" />
+        <EventToaster roomId={String(roomId)} nameOf={nameOf} audience="tv" />
       </div>
 
       {/* Body */}
@@ -213,19 +209,14 @@ export default function HostRoomPage() {
         />
       ) : null}
 
-      {(status === "active" || status === "paused") && view ? (
+      {inGame && view && views ? (
         <div className="relative flex flex-1 flex-col">
-          <PhaseCardsTV view={view} />
-
-          <AnimatePresence>
-            {roundOver && view.lastRoundSummary ? (
-              <RoundSummary
-                key="round-summary"
-                summary={view.lastRoundSummary}
-                players={view.players}
-              />
-            ) : null}
-          </AnimatePresence>
+          <views.Tv
+            roomId={String(roomId)}
+            paused={status === "paused"}
+            view={view}
+            players={data.players}
+          />
 
           {status === "paused" ? (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -246,7 +237,7 @@ export default function HostRoomPage() {
       {showResults && result ? (
         <Victory
           result={result}
-          players={view?.players ?? []}
+          players={data.players}
           actions={status === "ended" ? postGameActions : undefined}
         />
       ) : null}
@@ -261,7 +252,6 @@ export default function HostRoomPage() {
         </div>
       ) : null}
     </StageShell>
-    </AnchorProvider>
   );
 }
 
