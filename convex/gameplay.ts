@@ -11,6 +11,9 @@ import {
 } from "./lib/engine";
 import { REACTION_EMOJIS } from "../src/lib/platform/types";
 
+/** Minimum gap between a single player's reactions (server-enforced). */
+const REACTION_COOLDOWN_MS = 1200;
+
 /**
  * Gameplay — the player-facing move pipeline and audience-safe projections.
  *
@@ -52,6 +55,24 @@ export const sendReaction = mutation({
       throw new Error("LOCKED: reactions aren't open right now");
     }
     const player = await authenticatePlayer(ctx, roomId, guestToken);
+
+    // Server-side throttle: drop reactions fired faster than the cooldown so a
+    // client can't bypass its UI cooldown and spam the event feed. Bounded read.
+    const recent = await ctx.db
+      .query("events")
+      .withIndex("by_room_seq", (q) => q.eq("roomId", roomId))
+      .order("desc")
+      .take(12);
+    const me = String(player._id);
+    const now = Date.now();
+    const reactedRecently = recent.some(
+      (e) =>
+        e.type === "reaction" &&
+        String((e.payload as { playerId?: unknown })?.playerId) === me &&
+        now - e.createdAt < REACTION_COOLDOWN_MS,
+    );
+    if (reactedRecently) return { ok: true };
+
     await emit(
       ctx,
       roomId,

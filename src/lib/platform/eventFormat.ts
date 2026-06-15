@@ -1,6 +1,6 @@
 import { describeCard } from "@/lib/design/cards";
 import type { Card } from "@/lib/cards";
-import { rankPlural, type Rank } from "@/lib/cards/standard";
+import { rankPlural, rankSingular, type Rank } from "@/lib/cards/standard";
 
 /**
  * Turn a raw event row into a friendly, animatable notification. Returns null
@@ -85,13 +85,10 @@ export function formatEvent(
 
     /* ---- Cheat ---- */
     case "cheat_play": {
-      const rank = rankPlural(p.claimedRank as Rank);
+      const rank = p.claimedRank as Rank;
       const n = Number(p.count ?? 0);
-      return {
-        emoji: "🃏",
-        text: `${pid("playerId")} claims ${n} ${n === 1 ? rank.replace(/s$/, "") : rank}`,
-        tone: "info",
-      };
+      const label = n === 1 ? rankSingular(rank) : rankPlural(rank);
+      return { emoji: "🃏", text: `${pid("playerId")} claims ${n} ${label}`, tone: "info" };
     }
     case "cheat_challenge": {
       const ch = (p.challenge ?? {}) as {

@@ -27,7 +27,15 @@ export function CheatRevealOverlay({
   const primed = useRef(false);
 
   const sig = challenge
-    ? `${challenge.accusedId}:${challenge.challengerId}:${challenge.pileSize}:${challenge.wasBluff}`
+    ? [
+        challenge.accusedId,
+        challenge.challengerId,
+        challenge.loserId,
+        challenge.claimedRank,
+        challenge.pileSize,
+        challenge.wasBluff,
+        challenge.revealed.map((c) => c.id).join(","),
+      ].join(":")
     : null;
 
   useEffect(() => {

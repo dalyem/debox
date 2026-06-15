@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Flame } from "lucide-react";
 import { type Rank, rankPlural } from "@/lib/cards/standard";
@@ -51,8 +51,23 @@ export function CheatControllerView({ view, onMove, submitting }: GameController
   const nameOf = (id: string) =>
     v.table.players.find((p) => p.playerId === id)?.displayName ?? "Player";
 
-  // Group the hand by rank (already sorted rank→suit on the server).
+  // Keep `selected` in sync with the turn/hand so stale ids (from a turn that
+  // passed, or a challenge that changed the hand) can't block or corrupt a play.
   const hand = v.you.hand;
+  const isYourTurn = v.isYourTurn;
+  useEffect(() => {
+    if (!isYourTurn) {
+      setSelected((prev) => (prev.size ? new Set() : prev));
+      return;
+    }
+    const ids = new Set(hand.map((c) => c.id));
+    setSelected((prev) => {
+      const next = new Set([...prev].filter((id) => ids.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [isYourTurn, hand]);
+
+  // Group the hand by rank (already sorted rank→suit on the server).
   const groups = useMemo(() => {
     const byRank = new Map<Rank, typeof hand>();
     for (const c of hand) {

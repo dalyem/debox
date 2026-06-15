@@ -63,6 +63,23 @@ describe("setup", () => {
     const seq = Array.from({ length: 14 }, (_, i) => _internal.requiredRankAt(i));
     expect(seq).toEqual([14, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
   });
+
+  it("joinGame only seats new players before the deal and respects capacity", () => {
+    const lobby = engine.createGame({ players: THREE, config: engine.defaultConfig(), seed: 1, now: 0 });
+    // Pre-deal: a brand-new player can be seated.
+    const joined = engine.joinGame(lobby, seated("D", 3));
+    expect(joined.seatOrder).toContain("D");
+    // A duplicate is a no-op.
+    expect(engine.joinGame(joined, seated("D", 3)).seatOrder).toHaveLength(4);
+    // Once dealt/started, no late joins.
+    const started = engine.startGame(lobby, ctx()).state;
+    expect(engine.joinGame(started, seated("Z", 9)).seatOrder).not.toContain("Z");
+    // Capacity (maxPlayers = 8) is enforced.
+    let full = lobby;
+    for (let i = 0; i < 8; i++) full = engine.joinGame(full, seated(`P${i}`, 10 + i));
+    expect(full.seatOrder).toHaveLength(8);
+    expect(engine.joinGame(full, seated("Overflow", 99)).seatOrder).toHaveLength(8);
+  });
 });
 
 describe("playing + rank/turn advance", () => {

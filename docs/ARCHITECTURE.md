@@ -12,7 +12,7 @@ layered so that a new game is a *module*, not a rewrite.
 - [Realtime model](#realtime-model)
 - [Security model](#security-model)
 - [Session lifecycle](#session-lifecycle)
-- [The card engine & Phase Cards](#the-card-engine--phase-cards)
+- [The card engine & shipped games](#the-card-engine--shipped-games)
 - [Design system](#design-system)
 - [Scalability](#scalability)
 
@@ -329,15 +329,6 @@ existing **event feed** — no schema change: `gameplay.sendReaction` (player-au
 emits a `reaction` event, the host's `ReactionsLayer` animates it as a brief
 floater, and the controller's `ReactionFab` sends it. The toaster ignores
 reactions so they never clutter the notification stream.
-
-**Phase Cards** (`src/lib/games/phase-cards/`) is the first game — an original
-ten-phase climb. The phase ladder (`phases.ts`) is mechanically equivalent to the
-genre's classic progression (two sets of 3 → … → a set of 5 + a set of 3) with
-original names and copy. The engine (`engine.ts`) implements draw/lay-down/hit/
-freeze/discard, round scoring (1–9 = 5, 10–12 = 10, Freeze = 15, Shift = 25),
-phase advancement, and win detection. It is covered by unit tests for the card
-validators, phase validation, turn flow, freeze/skip, scoring and information
-hiding.
 
 ---
 

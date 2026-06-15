@@ -27,6 +27,16 @@ export function ReactionsLayer({ roomId }: { roomId: string }) {
   const [floaters, setFloaters] = useState<Floater[]>([]);
   const seen = useRef<Set<number>>(new Set());
   const primed = useRef(false);
+  const timers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+  // Clear any pending floater-removal timers on unmount.
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      for (const t of pending) clearTimeout(t);
+      pending.clear();
+    };
+  }, []);
 
   useEffect(() => {
     if (!events) return;
@@ -54,9 +64,11 @@ export function ReactionsLayer({ roomId }: { roomId: string }) {
     if (additions.length === 0) return;
     setFloaters((prev) => [...prev, ...additions].slice(-16));
     for (const f of additions) {
-      setTimeout(() => {
+      const t = setTimeout(() => {
+        timers.current.delete(t);
         setFloaters((prev) => prev.filter((x) => x.key !== f.key));
       }, 2600);
+      timers.current.add(t);
     }
   }, [events]);
 

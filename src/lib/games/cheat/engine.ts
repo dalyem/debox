@@ -313,7 +313,12 @@ export const CheatEngine: GameEngine<CheatState, CheatMove, CheatConfig> = {
   },
 
   joinGame(state, player) {
-    if (state.players[player.playerId] || state.pile.length > 0) return state;
+    // Only joinable before the deal (lobby assembly). The pile is empty at deal
+    // time and after every pickup, so "started" must key off the turn/hands.
+    const started =
+      state.turn.seq > 0 || Object.values(state.players).some((p) => p.hand.length > 0);
+    if (state.players[player.playerId] || started) return state;
+    if (state.seatOrder.length >= META.maxPlayers) return state;
     const seat = state.seatOrder.length;
     return {
       ...state,

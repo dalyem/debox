@@ -100,7 +100,12 @@ export function dealHands(
   handCount: number,
   perHand: number,
 ): { hands: StandardCard[][]; rest: StandardCard[] } {
-  if (handCount <= 0) throw new Error("handCount must be > 0");
+  if (!Number.isInteger(handCount) || handCount <= 0) {
+    throw new Error("handCount must be a positive integer");
+  }
+  if (!Number.isInteger(perHand) || perHand < 0) {
+    throw new Error("perHand must be a non-negative integer");
+  }
   if (deck.length < handCount * perHand) {
     throw new Error("Deck too small to deal the requested hands");
   }
@@ -166,6 +171,22 @@ export function suitSymbol(suit: Suit): string {
 /** Short rank label: "A", "2"…"10", "J", "Q", "K". */
 export function rankLabel(rank: Rank): string {
   return RANK_LABEL[rank];
+}
+
+/** Singular rank name: "Ace", "2"…"10", "Jack", "Queen", "King". */
+export function rankSingular(rank: Rank): string {
+  switch (rank) {
+    case 11:
+      return "Jack";
+    case 12:
+      return "Queen";
+    case 13:
+      return "King";
+    case 14:
+      return "Ace";
+    default:
+      return RANK_LABEL[rank];
+  }
 }
 
 /** Pluralized rank name used for claims/required ranks: "Aces", "10s", "Kings". */

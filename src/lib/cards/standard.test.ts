@@ -13,6 +13,7 @@ import {
   describeStandardCard,
   rankLabel,
   rankPlural,
+  rankSingular,
   shuffleStandard,
   sortStandardHand,
 } from "@/lib/cards/standard";
@@ -124,6 +125,13 @@ describe("labels", () => {
     expect(rankPlural(14)).toBe("Aces");
     expect(rankPlural(13)).toBe("Kings");
     expect(rankPlural(6)).toBe("6s");
+  });
+
+  it("singularizes ranks for a single-card claim", () => {
+    expect(rankSingular(14)).toBe("Ace");
+    expect(rankSingular(13)).toBe("King");
+    expect(rankSingular(11)).toBe("Jack");
+    expect(rankSingular(6)).toBe("6");
   });
 
   it("describes a card with rank + suit symbol", () => {
