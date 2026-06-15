@@ -47,7 +47,10 @@ export function ShareButton({
     }
 
     try {
-      await nav?.clipboard?.writeText(url);
+      // Optional chaining alone would resolve silently when the Clipboard API is
+      // missing, falsely showing "Link copied!" — so bail out if it's absent.
+      if (!nav?.clipboard?.writeText) return;
+      await nav.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {

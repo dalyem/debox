@@ -88,8 +88,17 @@ export function formatEvent(
       return { emoji: "🟩", text: `Round ${p.round} — go!`, tone: "info" };
     case "wr_solved": {
       const place = Number(p.placement ?? 0);
-      const ordinal = place === 1 ? "1st" : place === 2 ? "2nd" : place === 3 ? "3rd" : `${place}th`;
-      return { emoji: "🟩", text: `${pid("playerId")} cracked it — ${ordinal}!`, tone: "good" };
+      const rem10 = place % 10;
+      const rem100 = place % 100;
+      const suffix =
+        rem10 === 1 && rem100 !== 11
+          ? "st"
+          : rem10 === 2 && rem100 !== 12
+            ? "nd"
+            : rem10 === 3 && rem100 !== 13
+              ? "rd"
+              : "th";
+      return { emoji: "🟩", text: `${pid("playerId")} cracked it — ${place}${suffix}!`, tone: "good" };
     }
     case "wr_failed":
       return { emoji: "💀", text: `${pid("playerId")} struck out`, tone: "warn" };

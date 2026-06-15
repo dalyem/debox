@@ -63,6 +63,17 @@ describe("setup", () => {
     expect(pub.reveal).toBeNull();
     expect(JSON.stringify(pub)).not.toContain(s.answer);
   });
+
+  it("rejects a wordLength that doesn't match the dictionary", () => {
+    expect(() =>
+      engine.createGame({
+        players: P2,
+        config: { ...engine.defaultConfig(), wordLength: 4 },
+        seed: 1,
+        now: 0,
+      }),
+    ).toThrow();
+  });
 });
 
 describe("solving and scoring", () => {
@@ -132,6 +143,21 @@ describe("failing and timing out", () => {
     expect(step.state.players.C!.status).toBe("timed_out");
     expect(step.state.players.B!.roundScore).toBe(0);
     expect(step.state.players.A!.status).toBe("solved");
+  });
+
+  it("rejects a guess at/after the lock deadline (hard cutoff)", () => {
+    const s = start(P3, 1000);
+    const afterA = guess(s, "A", s.answer, 2000).state; // clock starts
+    const deadline = afterA.lockDeadline!;
+    const step = engine.submitMove(
+      afterA,
+      "B",
+      { type: "guess", word: wrongWord(afterA) },
+      { players: P3, seed: 1, now: deadline + 1 },
+    );
+    expect(step.status).toBe("round_over");
+    expect(step.state.players.B!.status).toBe("timed_out");
+    expect(step.state.players.B!.guesses.length).toBe(0); // the late guess wasn't applied
   });
 });
 

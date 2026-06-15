@@ -290,8 +290,10 @@ function validate(
   if (!move || move.type !== "guess") return { ok: false, reason: "Unknown move" };
 
   const word = normalizeGuess(String(move.word ?? ""));
-  if (word.length !== state.config.wordLength) {
-    return { ok: false, reason: `Guess must be ${state.config.wordLength} letters` };
+  // WORD_LENGTH is the source of truth — the dictionary and answer pool are
+  // fixed to it, so validate against the constant (not the config field).
+  if (word.length !== WORD_LENGTH) {
+    return { ok: false, reason: `Guess must be ${WORD_LENGTH} letters` };
   }
   if (!/^[a-z]+$/.test(word)) return { ok: false, reason: "Letters only" };
   if (p.guesses.length >= state.config.maxGuesses) {
@@ -412,6 +414,11 @@ export const WordRushEngine: GameEngine<
   },
 
   createGame({ players, config, seed }) {
+    // The dictionary and answer pool are fixed to WORD_LENGTH, so a divergent
+    // wordLength would let guesses validate but never solve. Fail fast instead.
+    if (config.wordLength !== WORD_LENGTH) {
+      throw new Error(`word-rush only supports ${WORD_LENGTH}-letter words`);
+    }
     const seated = [...players].sort((a, b) => a.seat - b.seat);
     const seatOrder = seated.map((p) => p.playerId);
     const playersMap: Record<string, WordRushPlayerState> = {};
@@ -486,6 +493,16 @@ export const WordRushEngine: GameEngine<
   },
 
   submitMove(state, playerId, move, ctx) {
+    // Hard cutoff: if the shared clock has already elapsed (e.g. the scheduled
+    // timeout ran late under load), resolve the round now instead of accepting a
+    // late guess — the deadline is authoritative regardless of scheduler timing.
+    if (
+      state.phase === "racing" &&
+      state.lockDeadline != null &&
+      ctx.now >= state.lockDeadline
+    ) {
+      return endRound(state, [{ type: "wr_time_up", audience: "all", payload: {} }], ctx.now);
+    }
     const check = validate(state, playerId, move);
     if (!check.ok) throw new Error(check.reason ?? "Illegal move");
     return applyGuess(state, playerId, move.word, ctx.now);
