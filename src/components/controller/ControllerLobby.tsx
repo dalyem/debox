@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Users } from "lucide-react";
 import { Avatar } from "@/components/platform/Avatar";
 import { QrCode } from "@/components/platform/QrCode";
+import { ShareButton } from "@/components/platform/ShareButton";
 import { Button } from "@/components/ui/button";
 import type { GameMeta } from "@/lib/games/types";
 
@@ -78,6 +79,14 @@ export function ControllerLobby({
           </div>
         </div>
         <QrCode value={host.shareUrl} size={150} />
+        <ShareButton
+          url={host.shareUrl}
+          roomCode={host.roomCode}
+          gameName={game?.name}
+          label="Share join link"
+          size="lg"
+          className="w-full max-w-sm"
+        />
         <Roster players={players} />
         <Button
           size="xl"

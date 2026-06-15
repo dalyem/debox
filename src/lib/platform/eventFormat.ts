@@ -83,6 +83,23 @@ export function formatEvent(
     case "spades_broken":
       return { emoji: "💥", text: "Spades broken!", tone: "warn" };
 
+    /* ---- Word Rush ---- */
+    case "wr_round_start":
+      return { emoji: "🟩", text: `Round ${p.round} — go!`, tone: "info" };
+    case "wr_solved": {
+      const place = Number(p.placement ?? 0);
+      const ordinal = place === 1 ? "1st" : place === 2 ? "2nd" : place === 3 ? "3rd" : `${place}th`;
+      return { emoji: "🟩", text: `${pid("playerId")} cracked it — ${ordinal}!`, tone: "good" };
+    }
+    case "wr_failed":
+      return { emoji: "💀", text: `${pid("playerId")} struck out`, tone: "warn" };
+    case "wr_lock_start":
+      return { emoji: "⏱️", text: "Clock's running — lock in!", tone: "warn" };
+    case "wr_lock_shorten":
+      return null; // the countdown visibly jumps; no toast needed
+    case "wr_time_up":
+      return { emoji: "⏰", text: "Time's up!", tone: "big" };
+
     /* ---- Cheat ---- */
     case "cheat_play": {
       const rank = p.claimedRank as Rank;

@@ -6,6 +6,8 @@ import { SpadesTvView } from "./spades/SpadesTvView";
 import { SpadesControllerView } from "./spades/SpadesControllerView";
 import { CheatTvView } from "./cheat/CheatTvView";
 import { CheatControllerView } from "./cheat/CheatControllerView";
+import { WordRushTvView } from "./word-rush/WordRushTvView";
+import { WordRushControllerView } from "./word-rush/WordRushControllerView";
 
 /**
  * Client-side game-view registry — the UI mirror of the server's game registry.
@@ -72,6 +74,7 @@ const REGISTRY: Record<string, GameViews> = {
   "phase-cards": { Tv: PhaseCardsTvView, Controller: PhaseCardsControllerView },
   spades: { Tv: SpadesTvView, Controller: SpadesControllerView },
   cheat: { Tv: CheatTvView, Controller: CheatControllerView },
+  "word-rush": { Tv: WordRushTvView, Controller: WordRushControllerView },
 };
 
 export function getGameViews(gameType: string): GameViews | null {
