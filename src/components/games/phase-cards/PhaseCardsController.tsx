@@ -5,13 +5,14 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Layers } from "lucide-react";
 import { type Card, isFreeze } from "@/lib/cards";
 import { canHitLaidGroup } from "@/lib/games/phase-cards/melds";
+import { reorderHand } from "@/lib/games/phase-cards/handOrder";
 import type { PhaseDefinition } from "@/lib/games/phase-cards/phases";
 import type {
   LaidGroup,
   PhaseCardsMove,
   PrivateGameView,
 } from "@/lib/games/phase-cards/types";
-import { DragCard, DragDropProvider, useDropZone } from "./dnd";
+import { DragCard, DragDropProvider, useDropZone, useReorderPreview } from "./dnd";
 import { useAnchor } from "./anchors";
 import { GamePiles } from "./GamePiles";
 import { MeldRow } from "./MeldRow";
@@ -115,6 +116,47 @@ function TableRow({
   );
 }
 
+/**
+ * The player's fanned, draggable hand. While a card is dragged sideways, the
+ * two cards flanking the spot it will land lift and zoom (and the rest recede),
+ * so you can see exactly where it's going before you let go — and the order
+ * only commits on release, so cards don't shuffle around under your finger.
+ */
+function Hand({ cards }: { cards: Card[] }) {
+  const handRef = useAnchor("hand");
+  const preview = useReorderPreview();
+  const draggedPos = preview ? cards.findIndex((c) => c.id === preview.id) : -1;
+  const insertAt = preview?.index ?? -1;
+
+  return (
+    <div ref={handRef} className="flex touch-none items-end justify-center">
+      {cards.map((card, i) => {
+        const isDragged = preview?.id === card.id;
+        // Where this card sits once the dragged card is lifted out of the fan.
+        const slot = draggedPos < 0 || i < draggedPos ? i : i - 1;
+        const gapOpen = preview != null && !isDragged;
+        const isNeighbor =
+          gapOpen && (slot === insertAt - 1 || slot === insertAt);
+        return (
+          <motion.div
+            key={card.id}
+            className={i > 0 ? "-ml-9" : ""}
+            style={{ zIndex: isDragged ? 100 : isNeighbor ? 60 : i }}
+            animate={{
+              y: isNeighbor ? -16 : 0,
+              scale: isNeighbor ? 1.16 : 1,
+              opacity: gapOpen && !isNeighbor ? 0.55 : 1,
+            }}
+            transition={{ type: "spring", stiffness: 500, damping: 34 }}
+          >
+            <DragCard card={card} size="md" />
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function PhaseCardsController({
   view,
   onMove,
@@ -172,17 +214,10 @@ export function PhaseCardsController({
     .map((id) => handById.get(id))
     .filter((c): c is Card => !!c);
 
-  const reorder = (cardId: string, overCardId: string) =>
-    setOrder((prev) => {
-      const from = prev.indexOf(cardId);
-      const to = prev.indexOf(overCardId);
-      if (from === -1 || to === -1 || from === to) return prev;
-      const next = prev.slice();
-      next.splice(from, 1);
-      next.splice(to, 0, cardId);
-      // Avoid a re-render if nothing actually moved (dragOver fires a lot).
-      return next.every((id, i) => id === prev[i]) ? prev : next;
-    });
+  // Commit a reorder once, on drop: drop `cardId` in at `toIndex` among the
+  // cards that aren't it (the index the hand previewed while dragging).
+  const reorder = (cardId: string, toIndex: number) =>
+    setOrder((prev) => reorderHand(prev, cardId, toIndex));
 
   const phase: PhaseDefinition = {
     index: you.phaseIndex,
@@ -213,7 +248,6 @@ export function PhaseCardsController({
   };
 
   const a = view.actions;
-  const handRef = useAnchor("hand");
 
   return (
     <DragDropProvider onReorder={reorder}>
@@ -221,10 +255,18 @@ export function PhaseCardsController({
       <AnimatePresence>
         {mode === "laydown" ? (
           <motion.div
+            key="laydown-scrim"
             data-dnd-barrier=""
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            // The scrim doubles as the DnD barrier. The instant it's dismissed
+            // it must stop intercepting the pointer — otherwise a sheet that
+            // lingers (or sticks) mid-exit leaves an invisible full-screen trap
+            // over the hand, and you can't drag a card again until you refresh.
+            // `pointer-events: none` both frees native taps and drops it from
+            // `elementsFromPoint`, so it no longer reads as a barrier.
+            exit={{ opacity: 0, pointerEvents: "none" }}
+            transition={{ duration: 0.18 }}
             onClick={() => setMode("play")}
             className="fixed inset-0 z-40 flex flex-col justify-end bg-black/40"
           >
@@ -343,17 +385,7 @@ export function PhaseCardsController({
                   touch that lands in the gaps between overlapping cards drags
                   instead of scrolling the screen. */}
               <div className="touch-none bg-ink-2/90 px-2 pb-2 pt-1 backdrop-blur">
-                <div ref={handRef} className="flex touch-none items-end justify-center">
-                  {orderedCards.map((card, i) => (
-                    <DragCard
-                      key={card.id}
-                      card={card}
-                      size="md"
-                      className={i > 0 ? "-ml-9" : ""}
-                      style={{ zIndex: i }}
-                    />
-                  ))}
-                </div>
+                <Hand cards={orderedCards} />
               </div>
             </>
           )}
