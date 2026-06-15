@@ -12,11 +12,13 @@ import { registerGame } from "./registry";
 import { PhaseCardsEngine } from "./phase-cards/engine";
 import { SpadesEngine } from "./spades/engine";
 import { CheatEngine } from "./cheat/engine";
+import { WordRushEngine } from "./word-rush/engine";
 
 registerGame(PhaseCardsEngine);
 registerGame(SpadesEngine);
 registerGame(CheatEngine);
+registerGame(WordRushEngine);
 
 export * from "./types";
 export * from "./registry";
-export { PhaseCardsEngine, SpadesEngine, CheatEngine };
+export { PhaseCardsEngine, SpadesEngine, CheatEngine, WordRushEngine };

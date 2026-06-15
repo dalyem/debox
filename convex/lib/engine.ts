@@ -187,8 +187,16 @@ async function commitStep(
     await touchRoom(ctx, room._id, { round: summary.round });
     // New turn → arm its timeout (the timeout self-reschedules if the player
     // extends their deadline by acting). Stale timeouts are ignored by seq.
+    // When the game declares its own deadline (e.g. a race countdown that can be
+    // shorter than a normal turn), arm at that deadline; otherwise use the
+    // platform's per-turn base. Backward compatible: turn-based games set
+    // turnDeadline = now + TURN_BASE_MS, so the delay is unchanged for them.
     if (summary.turnSeq != null && summary.turnSeq !== existing?.turnSeq) {
-      await ctx.scheduler.runAfter(TURN_BASE_MS, internal.gameplay.turnTimeout, {
+      const delay =
+        summary.turnDeadline != null
+          ? Math.max(0, summary.turnDeadline - now)
+          : TURN_BASE_MS;
+      await ctx.scheduler.runAfter(delay, internal.gameplay.turnTimeout, {
         roomId: room._id,
         seq: summary.turnSeq,
       });

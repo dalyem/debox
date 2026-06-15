@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Smartphone, Users } from "lucide-react";
 import { Avatar } from "@/components/platform/Avatar";
 import { QrCode } from "@/components/platform/QrCode";
+import { ShareButton } from "@/components/platform/ShareButton";
 import { Button } from "@/components/ui/button";
 import type { GameMeta } from "@/lib/games/types";
 
@@ -70,6 +71,14 @@ export function TvLobby({
             </div>
             <p className="text-sm">{game?.tagline}</p>
             <p className="mt-3 text-sm">Scan to hop straight in — no app, no account.</p>
+            <ShareButton
+              url={shareUrl}
+              roomCode={roomCode}
+              gameName={game?.name}
+              label="Share join link"
+              size="lg"
+              className="mt-3"
+            />
           </div>
         </div>
       </div>
