@@ -8,3 +8,4 @@
 export * from "./types";
 export * from "./deck";
 export * from "./validate";
+export * from "./standard";

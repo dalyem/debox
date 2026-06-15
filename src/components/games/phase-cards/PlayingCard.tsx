@@ -32,6 +32,14 @@ const SYMBOL_SIZE: Record<string, string> = {
   lg: "text-2xl",
   xl: "text-4xl",
 };
+// The wild/freeze name, shown centered + horizontal (no more sideways text).
+const LABEL_SIZE: Record<string, string> = {
+  xs: "text-[0.5rem]",
+  sm: "text-[0.55rem]",
+  md: "text-[0.72rem]",
+  lg: "text-base",
+  xl: "text-xl",
+};
 
 export interface PlayingCardProps {
   card: Card;
@@ -135,9 +143,14 @@ export function PlayingCard({
         {face.glyph}
       </span>
 
-      {/* Name for wild/freeze (larger cards only) */}
+      {/* Name for wild/freeze (larger cards only) — centered + horizontal. */}
       {!isNumber && showLabel ? (
-        <span className="absolute inset-y-0 right-1.5 flex items-center text-[0.6rem] font-extrabold uppercase tracking-widest opacity-90 [writing-mode:vertical-rl]">
+        <span
+          className={cn(
+            "pointer-events-none absolute inset-0 flex items-center justify-center px-1 text-center font-extrabold uppercase leading-none tracking-wide opacity-95",
+            LABEL_SIZE[size],
+          )}
+        >
           {face.label}
         </span>
       ) : null}

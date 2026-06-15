@@ -44,14 +44,15 @@ export const viewport: Viewport = {
   userScalable: false,
 };
 
-// A build-safe placeholder lets `next build` prerender the pages that mount
-// ClerkProvider even when the real key is absent — e.g. a Vercel Preview env or
-// a fresh clone — instead of crashing with "Missing publishableKey". Mirrors
-// the Convex URL fallback in ConvexClientProvider; the real key is required for
-// auth at runtime. (Decodes to the dummy frontend API "clerk.placeholder.dev".)
+/**
+ * A valid-format placeholder publishable key so `next build` can prerender the
+ * public pages (landing, /_not-found, join/play) even when the Clerk key is
+ * absent — e.g. a preview deploy without env vars. The real key is required at
+ * runtime for host auth. Mirrors the Convex URL fallback in
+ * `ConvexClientProvider`; when the env var is set this is never used.
+ */
 const CLERK_PUBLISHABLE_KEY =
-  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ??
-  "pk_test_Y2xlcmsucGxhY2Vob2xkZXIuZGV2JA==";
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k";
 
 export default function RootLayout({
   children,

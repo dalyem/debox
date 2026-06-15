@@ -75,6 +75,13 @@ export type PlatformEventType =
   | "game_end"
   | "room_close";
 
+/**
+ * Quick emoji reactions players can fling onto the host screen. Shared by the
+ * server (validation) and the controller (the reaction bar) so they can't drift.
+ */
+export const REACTION_EMOJIS = ["😂", "😮", "👀", "🤔", "💀"] as const;
+export type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
+
 export const ROOM_CODE_LENGTH = 4;
 /** Unambiguous alphabet — no 0/O/1/I/L to keep codes readable on a TV. */
 export const ROOM_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
