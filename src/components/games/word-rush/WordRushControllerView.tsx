@@ -6,9 +6,22 @@ import { Delete, CornerDownLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { GameControllerProps } from "@/components/games/registry";
 import type { PrivateWordRushView, TileState } from "@/lib/games/word-rush/types";
-import { Board, CountdownPill, TILE_COLOR } from "./WordRushBoard";
+import { Board, CountdownPill } from "./WordRushBoard";
 
 const KEY_ROWS = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"] as const;
+
+/**
+ * Keyboard hint colours — high-contrast so the state of every letter reads at a
+ * glance: vivid green for a correct spot, yellow for in-the-word, and a clearly
+ * dimmed dark grey for letters that have been tried and eliminated. Unused keys
+ * stay bright to look tappable.
+ */
+const KEY_COLOR: Record<TileState, string> = {
+  correct: "bg-[#6aaa64] text-white",
+  present: "bg-[#c9b458] text-white",
+  absent: "bg-[#3a3a3c] text-white/40",
+};
+const KEY_DEFAULT = "bg-white/20 text-cream hover:bg-white/30";
 
 function Key({
   label,
@@ -32,9 +45,9 @@ function Key({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex h-12 select-none items-center justify-center rounded-md font-display text-sm font-bold uppercase transition-all active:translate-y-px disabled:opacity-40",
-        wide ? "px-2.5 text-xs" : "flex-1",
-        state ? TILE_COLOR[state] : "bg-white/12 text-cream hover:bg-white/20",
+        "flex h-12 select-none items-center justify-center rounded-md font-display text-lg font-bold uppercase transition-all active:translate-y-px disabled:opacity-40",
+        wide ? "px-3" : "flex-1",
+        state ? KEY_COLOR[state] : KEY_DEFAULT,
       )}
     >
       {children ?? label}
@@ -106,7 +119,7 @@ export function WordRushControllerView({ view: raw, onMove, submitting }: GameCo
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Round + score strip */}
-      <div className="flex items-center justify-between gap-2 px-4 py-2 text-sm">
+      <div className="flex items-center justify-between gap-2 px-4 py-1.5 text-sm">
         <span className="chip">
           Round {view.round}/{view.maxRounds}
         </span>
@@ -117,7 +130,7 @@ export function WordRushControllerView({ view: raw, onMove, submitting }: GameCo
       </div>
 
       {/* Board */}
-      <div className="flex flex-1 items-center justify-center px-4">
+      <div className="flex flex-1 min-h-0 items-center justify-center overflow-hidden px-4">
         <Board
           rows={you.rows.map((r) => ({ letters: r.word.split(""), pattern: r.pattern }))}
           current={you.status === "playing" && !roundOver ? draft : undefined}
@@ -168,7 +181,8 @@ export function WordRushControllerView({ view: raw, onMove, submitting }: GameCo
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-1.5">
+          // pb clears the bottom-left reaction FAB so it can't cover Enter.
+          <div className="flex flex-col gap-1.5 pb-14">
             {KEY_ROWS.map((row, i) => (
               <div key={i} className="flex justify-center gap-1.5">
                 {i === 2 ? (

@@ -27,7 +27,7 @@ export type Cell =
 function Tile({ cell, size }: { cell: Cell; size: "sm" | "md" | "lg" }) {
   const dim =
     size === "lg"
-      ? "size-12 text-2xl sm:size-14 sm:text-3xl"
+      ? "size-14 text-3xl sm:size-16 sm:text-4xl"
       : size === "md"
         ? "size-10 text-xl"
         : "size-5 text-[0]";
